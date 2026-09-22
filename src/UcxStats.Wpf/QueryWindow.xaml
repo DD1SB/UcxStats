@@ -1,0 +1,22 @@
+<Window x:Class="UcxStats.Wpf.QueryWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Abfragen / Statistik" Height="760" Width="1150" WindowStartupLocation="CenterOwner">
+<Grid Margin="12">
+ <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="180"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+ <StackPanel Orientation="Horizontal">
+  <Button Width="100" Click="Execute_Click">Ausführen</Button>
+  <Button Width="110" Margin="8,0,0,0" Click="Save_Click">Speichern…</Button>
+  <Button Width="110" Margin="8,0,0,0" Click="Load_Click">Laden…</Button>
+  <Button Width="130" Margin="8,0,0,0" Click="ToMap_Click">Ergebnis → Karte</Button>
+  <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Foreground="Gray">Read-only SQL · Ctrl+Enter = Ausführen</TextBlock>
+ </StackPanel>
+ <TextBox x:Name="SqlBox" Grid.Row="1" Margin="0,8,0,0" AcceptsReturn="True" AcceptsTab="True"
+          FontFamily="Consolas" FontSize="14" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+          PreviewKeyDown="SqlBox_PreviewKeyDown"/>
+ <TextBlock x:Name="StatusText" Grid.Row="2" Margin="0,8,0,8"/>
+ <DataGrid x:Name="ResultGrid" Grid.Row="3" IsReadOnly="True" AutoGenerateColumns="True"
+           EnableRowVirtualization="True" EnableColumnVirtualization="True" SelectionMode="Extended"/>
+ <TextBlock Grid.Row="4" Margin="0,8,0,0" Foreground="Gray"
+            Text="Für Ergebnis → Karte muss die Abfrage die Spalte qso_id (qso.id) enthalten."/>
+</Grid></Window>

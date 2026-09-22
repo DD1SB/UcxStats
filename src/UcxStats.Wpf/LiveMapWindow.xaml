@@ -1,0 +1,56 @@
+<Window x:Class="UcxStats.Wpf.LiveMapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="UcxStats Live-Map" Height="310" Width="650"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Text="Überwachte Quelle"/>
+            <ComboBox x:Name="SourceCombo" Grid.Column="1" DisplayMemberPath="FileName"/>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="90"/>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Text="QSOs ab (UTC)"/>
+            <DatePicker x:Name="FromDatePicker" Grid.Column="1"/>
+            <TextBox x:Name="FromTimeBox" Grid.Column="2" Margin="8,0,0,0" VerticalContentAlignment="Center"/>
+            <Button Grid.Column="3" Margin="8,0,0,0" Click="Now_Click">Jetzt</Button>
+        </Grid>
+
+        <CheckBox x:Name="AutoUpdateCheck" Grid.Row="2" Margin="130,10,0,0" IsChecked="True">
+            Datei automatisch überwachen und neue QSOs nachladen
+        </CheckBox>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="130,12,0,0">
+            <Button x:Name="StartButton" Width="110" Click="Start_Click">Starten</Button>
+            <Button x:Name="StopButton" Width="110" Margin="8,0,0,0" IsEnabled="False" Click="Stop_Click">Stoppen</Button>
+        </StackPanel>
+
+        <Border Grid.Row="4" Margin="0,14,0,0" Padding="8" BorderThickness="1" BorderBrush="#DDD">
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap">Bereit.</TextBlock>
+        </Border>
+
+        <TextBlock Grid.Row="5" Margin="0,8,0,0" Foreground="Gray" TextWrapping="Wrap">
+            Dateiänderungen werden entprellt; die UCX-Quelldatei wird ausschließlich lesend geöffnet.
+        </TextBlock>
+    </Grid>
+</Window>

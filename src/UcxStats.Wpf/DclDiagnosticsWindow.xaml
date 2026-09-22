@@ -1,0 +1,54 @@
+<Window x:Class="UcxStats.Wpf.DclDiagnosticsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="DCL-Importdiagnose" Height="720" Width="1450" WindowStartupLocation="CenterOwner">
+<Grid Margin="12">
+ <Grid.RowDefinitions>
+  <RowDefinition Height="Auto"/>
+  <RowDefinition Height="*"/>
+  <RowDefinition Height="8"/>
+  <RowDefinition Height="180"/>
+  <RowDefinition Height="Auto"/>
+ </Grid.RowDefinitions>
+
+ <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+  <TextBlock x:Name="SummaryText" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+  <Button Width="120" Height="28" Margin="18,0,0,0" Click="Export_Click">CSV exportieren…</Button>
+ </StackPanel>
+
+ <DataGrid x:Name="DiagnosticGrid" Grid.Row="1" IsReadOnly="True" AutoGenerateColumns="False"
+           SelectionMode="Single" SelectionChanged="DiagnosticGrid_SelectionChanged"
+           EnableRowVirtualization="True">
+  <DataGrid.Columns>
+   <DataGridTextColumn Header="Typ" Binding="{Binding Kind}" Width="100"/>
+   <DataGridTextColumn Header="Ursache" Binding="{Binding Reason}" Width="270"/>
+   <DataGridTextColumn Header="Datum" Binding="{Binding QsoDate}" Width="90"/>
+   <DataGridTextColumn Header="UTC" Binding="{Binding TimeOn}" Width="60"/>
+   <DataGridTextColumn Header="Call" Binding="{Binding CallSign}" Width="115"/>
+   <DataGridTextColumn Header="Band" Binding="{Binding Band}" Width="65"/>
+   <DataGridTextColumn Header="Mode" Binding="{Binding Mode}" Width="70"/>
+   <DataGridTextColumn Header="DCL" Binding="{Binding Status}" Width="45"/>
+   <DataGridTextColumn Header="DXCC" Binding="{Binding Dxcc}" Width="55"/>
+   <DataGridTextColumn Header="ADIF2" Binding="{Binding Adif2}" Width="60"/>
+   <DataGridTextColumn Header="Station" Binding="{Binding StationCallSign}" Width="100"/>
+   <DataGridTextColumn Header="My Locator" Binding="{Binding MyGridSquare}" Width="90"/>
+  </DataGrid.Columns>
+ </DataGrid>
+
+ <GroupBox Grid.Row="3" Header="Mögliche / ähnliche UCX-QSOs">
+  <DataGrid x:Name="CandidateGrid" IsReadOnly="True" AutoGenerateColumns="False">
+   <DataGrid.Columns>
+    <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="70"/>
+    <DataGridTextColumn Header="Datum" Binding="{Binding QsoDate}" Width="95"/>
+    <DataGridTextColumn Header="UTC" Binding="{Binding StartTime}" Width="75"/>
+    <DataGridTextColumn Header="Call" Binding="{Binding CallSign}" Width="115"/>
+    <DataGridTextColumn Header="Band" Binding="{Binding BandDisplay}" Width="75"/>
+    <DataGridTextColumn Header="Mode" Binding="{Binding ModeDisplay}" Width="75"/>
+    <DataGridTextColumn Header="Quelle" Binding="{Binding Source}" Width="*"/>
+   </DataGrid.Columns>
+  </DataGrid>
+ </GroupBox>
+
+ <TextBlock Grid.Row="4" Margin="0,8,0,0" Foreground="Gray"
+            Text="Nicht gefundene QSOs werden nur diagnostiziert; UcxStats nimmt keine unsichere automatische Zuordnung vor."/>
+</Grid></Window>

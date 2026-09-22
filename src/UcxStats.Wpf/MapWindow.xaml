@@ -1,0 +1,16 @@
+<Window x:Class="UcxStats.Wpf.MapWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+ Title="UcxStats Karte" Height="850" Width="1400" KeyDown="Window_KeyDown">
+ <Grid>
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <DockPanel Margin="8">
+   <Button DockPanel.Dock="Right" Width="110" Margin="8,0,0,0" Click="Fullscreen_Click">Vollbild (F11)</Button>
+   <CheckBox x:Name="SyncMapsCheck" DockPanel.Dock="Right" Margin="8,0" VerticalAlignment="Center" IsChecked="True">Karten synchronisieren</CheckBox>
+   <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontWeight="SemiBold"/>
+  </DockPanel>
+  <wv2:WebView2 x:Name="MapWebView" Grid.Row="1"/>
+  <TextBlock x:Name="StatusText" Grid.Row="2" Margin="8,4"/>
+ </Grid>
+</Window>

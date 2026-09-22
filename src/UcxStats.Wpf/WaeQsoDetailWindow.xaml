@@ -1,0 +1,21 @@
+<Window x:Class="UcxStats.Wpf.WaeQsoDetailWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="WAE QSOs" Height="520" Width="1220" WindowStartupLocation="CenterOwner">
+<Grid Margin="12">
+ <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+ <TextBlock x:Name="HeaderText" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+ <DataGrid x:Name="QsoGrid" Grid.Row="1" IsReadOnly="True" AutoGenerateColumns="False">
+  <DataGrid.Columns>
+   <DataGridTextColumn Header="Datum" Binding="{Binding QsoDate}" Width="95"/>
+   <DataGridTextColumn Header="UTC" Binding="{Binding StartTime}" Width="75"/>
+   <DataGridTextColumn Header="Call" Binding="{Binding CallSign}" Width="115"/>
+   <DataGridTextColumn Header="UCX Land" Binding="{Binding UcxCountry}" Width="80"/>
+   <DataGridTextColumn Header="WAE" Binding="{Binding ResolvedWae}" Width="75"/>
+   <DataGridTextColumn Header="Mode" Binding="{Binding ModeDisplay}" Width="75"/>
+   <DataGridTextColumn Header="Status" Binding="{Binding Confirmation}" Width="220"/>
+   <DataGridTextColumn Header="Locator" Binding="{Binding Locator}" Width="90"/>
+   <DataGridTextColumn Header="Quelle" Binding="{Binding Source}" Width="*"/>
+  </DataGrid.Columns>
+ </DataGrid>
+</Grid></Window>

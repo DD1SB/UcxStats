@@ -1,0 +1,120 @@
+<Window x:Class="UcxStats.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="UcxStats v0.12.3.3" Height="860" Width="1320">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+            <Button Width="180" Height="32" Click="OpenUcx_Click">UCX-Datei(en) öffnen…</Button>
+            <Button Width="130" Height="32" Margin="8,0,0,0" Click="StationProfiles_Click">Stationsprofile…</Button>
+            <Button Width="110" Height="32" Margin="8,0,0,0" Click="Map_Click">Karte…</Button>
+            <Button Width="110" Height="32" Margin="8,0,0,0" Click="LiveMap_Click">Live-Map…</Button>
+            <Button Width="130" Height="32" Margin="8,0,0,0" Click="AzimuthDistance_Click">Azimut / Distanz…</Button>
+            <Button Width="125" Height="32" Margin="8,0,0,0" Click="Query_Click">Abfragen…</Button>
+            <Button Width="105" Height="32" Margin="8,0,0,0" Click="Awards_Click">Diplome…</Button>
+            <Button Width="115" Height="32" Margin="8,0,0,0" Click="DclImport_Click">DCL-ADIF…</Button>
+            <CheckBox x:Name="SingleMapWindowCheck" Margin="10,0,0,0" VerticalAlignment="Center" IsChecked="True">Ein Kartenfenster</CheckBox>
+            <Button x:Name="DiagnosticsButton" Width="110" Height="32" Margin="8,0,0,0"
+                    IsEnabled="False" Click="Diagnostics_Click">Diagnose…</Button>
+        </StackPanel>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="{Binding ActiveSourceText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ActiveSourceTooltip}" />
+            <TextBlock Grid.Column="1" HorizontalAlignment="Right" Text="{Binding DatabaseSummaryText}" ToolTip="{Binding DatabasePath}" />
+        </Grid>
+
+        <Grid Grid.Row="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="10" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="250" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="QsoGrid" ItemsSource="{Binding Qsos}" AutoGenerateColumns="False" IsReadOnly="True"
+                      EnableRowVirtualization="True" SelectionMode="Extended" SelectionUnit="FullRow">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Datum" Binding="{Binding Date, StringFormat={}{0:dd.MM.yyyy}}" Width="100" />
+                    <DataGridTextColumn Header="UTC" Binding="{Binding StartTime, StringFormat={}{0:HH:mm}}" Width="70" />
+                    <DataGridTextColumn Header="Call" Binding="{Binding CallSign}" Width="105" />
+                    <DataGridTextColumn Header="Band" Binding="{Binding BandDisplay}" Width="75" />
+                    <DataGridTextColumn Header="Mode" Binding="{Binding ModeDisplay}" Width="75" />
+                    <DataGridTextColumn Header="Frequenz" Binding="{Binding FrequencyDisplay}" Width="145" />
+                    <DataGridTextColumn Header="Locator" Binding="{Binding Locator}" Width="90" />
+                    <DataGridTextColumn Header="Country" Binding="{Binding Country}" Width="75" />
+                    <DataGridTextColumn Header="QTH" Binding="{Binding Qth}" Width="*" />
+                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="110" />
+                    <DataGridTextColumn Header="Quelle" Binding="{Binding Source}" Width="140" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <GroupBox Grid.Column="2" Header="Importierte UCX-Quellen">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <ListView x:Name="SourceList" ItemsSource="{Binding Sources}" SelectionMode="Extended" SelectionChanged="SourceList_SelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Datei" DisplayMemberBinding="{Binding FileName}" Width="145" />
+                            <GridViewColumn Header="QSOs" DisplayMemberBinding="{Binding QsoCount}" Width="60" />
+                            <GridViewColumn Header="QTH" DisplayMemberBinding="{Binding StationProfileName}" Width="90" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <StackPanel Grid.Row="1" Margin="4">
+                    <TextBlock x:Name="SourceSelectionText" Text="Keine Quelle ausgewählt" Margin="0,0,0,2"/>
+                    <ComboBox x:Name="SourceProfileCombo" DisplayMemberPath="Name" Margin="0,4,0,4"/>
+                    <Button x:Name="AssignProfileButton" Click="AssignProfile_Click">QTH zuordnen</Button>
+                    <StackPanel x:Name="GeoProgressPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                        <TextBlock x:Name="GeoProgressText" Text="Geodaten werden berechnet…" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <ProgressBar x:Name="GeoProgressBar" Height="16" Minimum="0" Maximum="100"/>
+                        <Button Margin="0,6,0,0" Click="CancelGeo_Click">Abbrechen</Button>
+                    </StackPanel>
+                </StackPanel></Grid>
+            </GroupBox>
+            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="QSO-Details" Padding="8">
+                <Grid DataContext="{Binding SelectedItem, ElementName=QsoGrid}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock FontWeight="Bold" Text="Verbindung"/>
+                        <TextBlock Text="{Binding CallSign}"/>
+                        <TextBlock Text="{Binding Sent, StringFormat=Gesendet: {0}}"/>
+                        <TextBlock Text="{Binding Received, StringFormat=Empfangen: {0}}"/>
+                        <TextBlock Text="{Binding Remarks, StringFormat=Bemerkung: {0}}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                        <TextBlock FontWeight="Bold" Text="Gebiet / Verwaltung"/>
+                        <TextBlock Text="{Binding Manager, StringFormat=Manager: {0}}"/>
+                        <TextBlock Text="{Binding District, StringFormat=District: {0}}"/>
+                        <TextBlock Text="{Binding Iota, StringFormat=IOTA: {0}}"/>
+                        <TextBlock Text="{Binding Zones}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="16,0,0,0">
+                        <TextBlock FontWeight="Bold" Text="Bestätigungen / Diplome"/>
+                        <TextBlock Text="{Binding QslStatus}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Awards}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+        </Grid>
+
+        <TextBlock Grid.Row="6" Text="{Binding StatusText}" />
+    </Grid>
+</Window>

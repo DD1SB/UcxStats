@@ -1,0 +1,43 @@
+# .NET build output
+bin/
+obj/
+artifacts/
+
+# Visual Studio / IDE
+.vs/
+*.user
+*.suo
+.vscode/*.user
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# User/log data - never commit real station data
+*.ucx
+*.adi
+*.adif
+
+# Local DXCC polygon dataset
+dxcc.geojson
+**/dxcc.geojson
+
+# Local map/tile configuration
+map-tiles.json
+
+# Logs / temporary files
+*.log
+*.tmp
+*.bak
+
+# WebView2 runtime data, should it ever appear outside bin/
+*.WebView2/
+EBWebView/
+
+# Local publish/package output
+publish/
+packages/
+*.zip
