@@ -1,3 +1,5 @@
+using UcxStats.Data.Dxcc;
+
 namespace UcxStats.Data.Database;
 
 public interface IQsoRepository
@@ -7,10 +9,15 @@ public interface IQsoRepository
     Task<QsoImportResult> UpsertManyAsync(IEnumerable<QsoImportRecord> records, CancellationToken cancellationToken = default);
     Task<DclImportResult> ImportDclAdifAsync(string adifText, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WaeQsoCandidate>> GetWaeQsoCandidatesAsync(CancellationToken cancellationToken = default);
+    Task<DxccIdentityAuditResult> GetDxccIdentityAuditAsync(CancellationToken cancellationToken = default);
+    Task<DxccStatusSnapshot> GetDxccStatusAsync(QsoScope scope, CancellationToken cancellationToken = default);
     Task<QueryResult> ExecuteReadOnlyQueryAsync(string sql, CancellationToken cancellationToken = default);
     Task<long> GetTotalQsoCountAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SourceSummary>> GetSourcesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsByIdsAsync(IReadOnlyCollection<long> qsoIds, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsAsync(
+        QsoScope scope,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsAsync(
         IReadOnlyCollection<string>? sourceFiles = null,
         DateTime? fromUtc = null,

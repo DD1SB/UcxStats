@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\UcxStats.Core\UcxStats.Core.csproj" />
+    <ProjectReference Include="..\..\src\UcxStats.Data\UcxStats.Data.csproj" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using UcxStats.Data.Confirmation;
 
 namespace UcxStats.Data.Database;
 
@@ -50,7 +51,7 @@ public static partial class DclAdifParser
     }
 
     public static bool IsConfirmedStatus(string status) =>
-        status is "c" or "i" or "m" or "n" or "o";
+        QsoConfirmationEvaluator.IsDclConfirmedStatus(status);
 
     private static string NormalizeDate(string value) =>
         value.Length >= 8 ? $"{value[..4]}-{value.Substring(4, 2)}-{value.Substring(6, 2)}" : value;

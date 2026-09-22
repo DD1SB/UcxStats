@@ -287,33 +287,23 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _geoJobCancellation?.Cancel();
     }
 
-    private async Task<(IReadOnlyList<MapQsoPoint> Points, string Title)> GetGeoSelectionAsync()
+    private async Task<(IReadOnlyList<MapQsoPoint> Points, string Title, QsoScope Scope)> GetGeoSelectionAsync()
     {
         var selectedRows = QsoGrid.SelectedItems.Cast<QsoGridRow>().ToList();
         var selectedSources = SourceList.SelectedItems.Cast<SourceSummary>().ToList();
 
-        IReadOnlyCollection<string>? paths;
-        if (selectedRows.Count > 0)
-            paths = selectedRows.Select(x => x.SourceFile).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        else
-            paths = selectedSources.Count > 0 ? selectedSources.Select(x => x.FullPath).ToArray() : null;
-
-        var allPoints = await _repository.GetMapQsoPointsAsync(paths);
-
         if (selectedRows.Count > 0)
         {
-            static string TimeKey(TimeOnly t) => t.ToString("HH:mm:ss");
-            static string DateKey(DateOnly d) => d.ToString("yyyy-MM-dd");
-
-            var wanted = selectedRows
-                .Select(x => (Source: x.SourceFile, Call: x.CallSign, Date: DateKey(x.Date), Time: TimeKey(x.StartTime)))
-                .ToHashSet();
-
-            var points = allPoints.Where(x =>
-                wanted.Contains((x.SourceFile, x.CallSign, x.QsoDate, x.StartTime))).ToList();
-
-            return (points, $"{selectedRows.Count:N0} ausgewählte QSOs · {points.Count:N0} kartierbar");
+            var scope = QsoScope.ForSourceRecords(selectedRows.Select(x =>
+                new QsoSourceRecordKey(x.SourceFile, x.Qso.RecordIndex)));
+            var points = await _repository.GetMapQsoPointsAsync(scope);
+            return (points, $"{selectedRows.Count:N0} ausgewählte QSOs · {points.Count:N0} kartierbar", scope);
         }
+
+        var sourceScope = selectedSources.Count > 0
+            ? QsoScope.ForSources(selectedSources.Select(x => x.FullPath))
+            : QsoScope.All;
+        var allPoints = await _repository.GetMapQsoPointsAsync(sourceScope);
 
         var title = selectedSources.Count switch
         {
@@ -321,13 +311,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             1 => $"{selectedSources[0].FileName} · {allPoints.Count:N0} QSOs",
             _ => $"{selectedSources.Count:N0} Quellen · {allPoints.Count:N0} QSOs"
         };
-        return (allPoints, title);
+        return (allPoints, title, sourceScope);
     }
 
     private void LiveMap_Click(object sender, RoutedEventArgs e)
     {
         var window = new LiveMapWindow(_repository, this);
         window.Show();
+    }
+
+    private void DxccSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new DxccMapSettingsWindow { Owner = this };
+        if (window.ShowDialog() == true)
+            StatusText = "DXCC-Kartenkonfiguration gespeichert; sie gilt für neu geladene Karten.";
     }
 
     private async void Map_Click(object sender, RoutedEventArgs e)
@@ -349,12 +346,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var title = selection.Title;
             if (SingleMapWindowCheck.IsChecked == true && _singleMapWindow is { IsLoaded: true })
             {
-                await _singleMapWindow.UpdateDataAsync(points, title);
+                await _singleMapWindow.UpdateDataAsync(points, title, selection.Scope);
                 _singleMapWindow.Activate();
             }
             else
             {
-                var window = new MapWindow(points, title) { Owner = this };
+                var window = new MapWindow(_repository, selection.Scope, points, title) { Owner = this };
                 if (SingleMapWindowCheck.IsChecked == true)
                 {
                     _singleMapWindow = window;

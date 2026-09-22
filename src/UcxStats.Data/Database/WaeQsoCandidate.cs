@@ -1,3 +1,5 @@
+using UcxStats.Data.Confirmation;
+
 namespace UcxStats.Data.Database;
 
 public sealed record WaeQsoCandidate(
@@ -16,12 +18,15 @@ public sealed record WaeQsoCandidate(
     int? DclDxcc,
     int? DclAdif2)
 {
-    public bool PaperQslReceived => (Status151Raw & 0x20) != 0;
-    public bool EqslConfirmed => (Status151Raw & 0x40) != 0;
-    public bool LotwConfirmed => (Status151Raw & 0x80) != 0;
-    public bool ClubLogConfirmed => (Status161Raw & 0x20) != 0;
-    public bool DclConfirmed => DclAdifParser.IsConfirmedStatus(DclStatus);
-    public bool Confirmed => PaperQslReceived || EqslConfirmed || LotwConfirmed || ClubLogConfirmed || DclConfirmed;
+    public QsoConfirmationFlags ConfirmationFlags =>
+        QsoConfirmationEvaluator.GetFlags(Status151Raw, Status161Raw, DclStatus);
+
+    public bool PaperQslReceived => ConfirmationFlags.HasFlag(QsoConfirmationFlags.Paper);
+    public bool EqslConfirmed => ConfirmationFlags.HasFlag(QsoConfirmationFlags.Eqsl);
+    public bool LotwConfirmed => ConfirmationFlags.HasFlag(QsoConfirmationFlags.Lotw);
+    public bool ClubLogConfirmed => ConfirmationFlags.HasFlag(QsoConfirmationFlags.ClubLog);
+    public bool DclConfirmed => ConfirmationFlags.HasFlag(QsoConfirmationFlags.Dcl);
+    public bool Confirmed => QsoConfirmationEvaluator.IsConfirmedForExistingWaePolicy(ConfirmationFlags);
 
     public string ConfirmationText
     {

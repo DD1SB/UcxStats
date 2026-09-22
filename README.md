@@ -67,6 +67,7 @@ The **Diagnose…** button lists the first 100 warnings found during parsing/val
 - `docs/UCX_FORMAT.md` - reverse-engineered UCX record map
 - `docs/ARCHITECTURE.md` - project boundaries and read-only rule
 - `docs/DATABASE.md` - SQLite schema/import behavior
+- `docs/MAP_DXCC.md` - external DXCC overlay configuration, behavior and Windows checks
 - `docs/PROJECT_STRUCTURE.md` - source tree
 - `DONE.md` / `TODO.md` - development state
 
@@ -226,3 +227,53 @@ The DCL importer also persists `DXCC` and `APP_DCL_ADIF2`. For DCL-confirmed QSO
 - Tile provider URL, name, attribution and max zoom are no longer hard-coded. On first use UcxStats creates:
   `%LOCALAPPDATA%\UcxStats\map-tiles.json`
 - A tile load failure is surfaced in the map status bar together with the provider name and configuration path.
+
+## DXCC status overlay
+
+The optional Leaflet DXCC overlay is implemented on top of the numeric DXCC foundation. The polygon data remains an external user-provided resource and is never bundled with UcxStats.
+
+- DXCC and WAE remain separate entity models. A QSO has an optional numeric ADIF/DXCC identity, while `WaeEntityResolver` may independently resolve a more specific WAE-only entity such as `4U1V`, `GM/S`, `JW/B`, `TA1` or Sicily.
+- SQLite stores the nullable numeric identity in `qso.dxcc_entity_id`. DCL code `999` and released ADIF code `0` are explicit non-DXCC evidence and suppress UCX fallback. Otherwise, a resolved UCX country identity is effective; a catalog-recognized normal DCL entity is used only when UCX is unresolved. UCX/DCL disagreements remain audit conflicts without replacing the UCX identity. `APP_DCL_ADIF2` remains WAE-specific evidence and is never treated as a DXCC ID.
+- UCX-country mapping version 3 is generated from the authoritative entity-definition section of the official UcxLog 8.50 `COUNTRY.DAT` resource, independently of any user's log history. It inventories 452 distinct UCX classification labels: 340 map to Current ADIF entities, 62 historical `#...` labels map to Deleted entities, and 50 WAE/R150S-only subdivisions remain explicitly unresolved because UcxLog supplies no numeric DXCC ID for them. This is not a callsign-prefix resolver. The previous 188 audit-derived mappings remain numerically unchanged except `7Q`, corrected from Lesotho/432 to UcxLog's Malawi/440 assignment.
+- Confirmation sources remain distinct: received paper QSL (`status151 & 0x20`), eQSL (`0x40`), LoTW (`0x80`), ClubLog (`status161 & 0x20`) and confirmed DCL status (`c/i/m/n/o`). Existing WAE policy still accepts any of those sources.
+- DXCC display states are `Unknown`, `NotWorked`, `Worked`, `OtherConfirmed` (eQSL/ClubLog), and `DxccCredited` (paper/LoTW). The map uses gray/red/yellow/light-blue/green fill plus distinct outline patterns. DCL-only confirmation remains `Worked`; it does not promote DXCC display status.
+- DXCC polygons remain an external, user-provided `dxcc.geojson`; no geometry is bundled or copied into SQLite. Missing or invalid geometry does not affect application startup or existing maps.
+- The known AmazingProducer file with SHA-256 `e9b086eff7fb690e9990e10855f3fb494f9d1115e4af1928f6a8b545efef4568` has an explicit v1 normalization profile for three incorrect IDs, Kosovo, duplicate Conway Reef, and retained non-DXCC Somaliland geometry. Unknown hashes are validated without those source-specific corrections.
+- Current/deleted/unknown classification is exposed through `IDxccEntityCatalog`. The offline catalog is generated from the Released ADIF 3.1.7 machine-readable DXCC Entity Code TSV dated 2026-03-22: 340 Current entities, 62 Deleted entities, plus code `0` as an explicit non-DXCC sentinel. Unknown numeric IDs remain `Unknown`. No ADIF or ARRL site is contacted at runtime.
+
+Use **DXCC-Karte…** in the main window to select and validate an absolute path to `dxcc.geojson`. UcxStats stores the path and optional default visibility in:
+
+```text
+%LOCALAPPDATA%\UcxStats\map-dxcc.json
+```
+
+Each map validates and normalizes that source, stages only the normalized copy in its private temporary `MapWeb` folder, and loads it once through `https://ucxstats.local`. The overlay defaults to off. Its resident Leaflet layer is restyled when the existing band checkboxes change; geometry is not fetched again and never participates in `fitBounds`. Polygon popups show numeric ID, source prefix, current selected-band status, QSO count, and worked/confirmation bands. Complete compact aggregate snapshots are also refreshed by Live Map, including changes caused by QSOs without locators.
+
+Missing, moved, invalid, or unknown-hash geometry never prevents the base map, markers, paths, day/night layer, map synchronization, or Live Map from loading. See `docs/MAP_DXCC.md` for behavior, diagnostics, the Windows acceptance checklist, and the primary-world vector limitation.
+
+### Regenerating the ADIF DXCC catalog
+
+Download the official `ADIF_317_resources_2026_03_22.zip`, extract
+`317/exports/tsv/enumerations_dxcc_entity_code.tsv`, then run:
+
+```bash
+tools/generate-dxcc-catalog.sh /path/to/enumerations_dxcc_entity_code.tsv
+```
+
+The generator verifies the exact Released resource SHA-256 and row totals before replacing the compact generated C# catalog. For a future ADIF release, review and update the generator's version, source hash, release metadata and expected totals before regenerating. The UCX mapping, WAE resolver and external GeoJSON normalization are independent and are not generated from this catalog.
+
+### Regenerating the UCX country mapping
+
+The mapping source is the entity-definition section of `Country0.txt` from the official UcxLog 8.50 `UcxLog.zip` / `COUNTRY.DAT` resource dated 2026-06-11. The repository does not redistribute that source file and does not download it at runtime. After obtaining and locally extracting the authoritative `Country0.txt` payload, run:
+
+```bash
+tools/generate-ucx-dxcc-mapping.sh /path/to/UcxLog-8.50-Country0.txt
+```
+
+The generator verifies the exact decoded-resource SHA-256 and structural totals before replacing `UcxLog850CountryDxccMappings.Generated.cs`. When UcxLog changes its entity data, obtain the new official resource, review its new/changed/removed classifications against the offline ADIF catalog, update the pinned hashes/version/counts, regenerate, increment `MappingVersion`, and review every unresolved or duplicate source code. This process is independent of real-log audits, so a newly worked normal UCX entity does not require a prior database observation or a runtime callsign-prefix lookup.
+
+The source-local UCX country audit is exposed as `IQsoRepository.GetDxccIdentityAuditAsync()`. Run it against the repository instance that points at the user's real `ucxstats.db`; its result contains totals, per-country counts/mappings, unresolved codes, evidence classes, and DCL/UCX conflicts. A command-line entry point is also available:
+
+```text
+dotnet run --project tests/UcxStats.SmokeTest -- dxcc-audit "/path/to/ucxstats.db" [--csv "/path/to/audit.csv"]
+```

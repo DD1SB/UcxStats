@@ -1,6 +1,13 @@
 using System.Buffers.Binary;
 using System.Text;
 using UcxStats.Core.Ucx;
+using UcxStats.SmokeTest;
+
+if (args.Length > 0)
+{
+    Environment.ExitCode = await DxccAuditCli.RunAsync(args, Console.Out, Console.Error);
+    return;
+}
 
 var recordData = new byte[UcxConstants.RecordSize];
 recordData[0] = 1;

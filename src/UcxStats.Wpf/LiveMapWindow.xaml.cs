@@ -179,20 +179,20 @@ public partial class LiveMapWindow : Window
                     sync = await _importService.SyncFileAsync(_activeSource.FullPath, token);
                 }
 
-                var points = await _repository.GetMapQsoPointsAsync(
-                    new[] { _activeSource.FullPath }, _fromUtc, token);
+                var scope = QsoScope.ForSources([_activeSource.FullPath]).WithFromUtc(_fromUtc);
+                var points = await _repository.GetMapQsoPointsAsync(scope, token);
 
                 if (initial || _mapWindow is null || !_mapWindow.IsLoaded)
                 {
                     var title = $"LIVE · {_activeSource.FileName} · ab {_fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
-                    _mapWindow = new MapWindow(points, title) { Owner = _mainOwner };
+                    _mapWindow = new MapWindow(_repository, scope, points, title) { Owner = _mainOwner };
                     _mapWindow.Closed += (_, _) => _mapWindow = null;
                     _mapWindow.Show();
                 }
                 else
                 {
                     var title = $"LIVE · {_activeSource.FileName} · ab {_fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
-                    await _mapWindow.UpdateLiveDataAsync(points, title);
+                    await _mapWindow.UpdateLiveDataAsync(points, title, scope);
                 }
 
                 StatusText.Text =

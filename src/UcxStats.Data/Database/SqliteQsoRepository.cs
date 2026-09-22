@@ -1,9 +1,20 @@
 using Microsoft.Data.Sqlite;
+using UcxStats.Data.Confirmation;
+using UcxStats.Data.Dxcc;
 
 namespace UcxStats.Data.Database;
 
 public sealed class SqliteQsoRepository : IQsoRepository
 {
+    private static readonly string KnownNormalDxccEntityIdsSql = string.Join(",",
+        DxccEntityCatalog.ReleasedAdif317.Entries
+            .Where(x => x.Status is DxccCatalogEntityStatus.Current or DxccCatalogEntityStatus.Deleted)
+            .Select(x => x.EntityId));
+
+    private static readonly string ExplicitNonDxccCodesSql = string.Join(",",
+        DxccIdentityResolver.AdifExplicitNonDxccCode,
+        DxccIdentityResolver.DclExplicitNonDxccCode);
+
     private readonly string _connectionString;
     public string DatabasePath { get; }
 
@@ -69,6 +80,7 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 remarks TEXT NOT NULL,
                 status151_raw INTEGER NOT NULL,
                 country TEXT NOT NULL,
+                dxcc_entity_id INTEGER NULL,
                 continent_code INTEGER NOT NULL,
                 status161_raw INTEGER NOT NULL,
                 multiplier1 TEXT NOT NULL,
@@ -113,6 +125,11 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 bearing_deg REAL NOT NULL,
                 PRIMARY KEY(qso_id, station_profile_id)
             );
+
+            CREATE TABLE IF NOT EXISTS ucxstats_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """;
 
         await using var command = connection.CreateCommand();
@@ -125,8 +142,18 @@ public sealed class SqliteQsoRepository : IQsoRepository
         await EnsureColumnExistsAsync(connection, "qso", "dcl_status", "TEXT NULL", cancellationToken); 
         await EnsureColumnExistsAsync(connection, "qso", "dcl_dxcc", "INTEGER NULL", cancellationToken);
         await EnsureColumnExistsAsync(connection, "qso", "dcl_adif2", "INTEGER NULL", cancellationToken);
+        await EnsureColumnExistsAsync(connection, "qso", "dxcc_entity_id", "INTEGER NULL", cancellationToken);
         await EnsureColumnExistsAsync(connection, "source_file", "station_profile_id", "INTEGER NULL REFERENCES station_profile(id) ON DELETE SET NULL", cancellationToken);
         await RenameColumnIfNeededAsync(connection, "qso", "frequency_hz", "rx_frequency_hz", cancellationToken);
+
+        await using (var index = connection.CreateCommand())
+        {
+            index.CommandText = "CREATE INDEX IF NOT EXISTS idx_qso_dxcc_band ON qso(dxcc_entity_id, band_code);";
+            await index.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await EnsureDxccBackfillAsync(connection, cancellationToken);
+        await EnsureDxccIdentityResolutionPolicyAsync(connection, cancellationToken);
     }
 
     public async Task<QsoImportResult> UpsertManyAsync(IEnumerable<QsoImportRecord> records, CancellationToken cancellationToken = default)
@@ -200,6 +227,10 @@ public sealed class SqliteQsoRepository : IQsoRepository
             clear.CommandText = "UPDATE qso SET dcl_status=NULL, dcl_dxcc=NULL, dcl_adif2=NULL;";
             await clear.ExecuteNonQueryAsync(cancellationToken);
         }
+        await ResetDxccIdentitiesFromAvailableEvidenceAsync(
+            connection,
+            (SqliteTransaction)transaction,
+            cancellationToken);
 
         foreach (var record in confirmed)
         {
@@ -284,16 +315,32 @@ public sealed class SqliteQsoRepository : IQsoRepository
             }
 
             var matchedId = matchCandidates[0].Id;
+            var parsedDxcc = int.TryParse(record.Dxcc, out var dxcc) &&
+                             DxccIdentityResolver.IsRecognizedDclIdentityCode(dxcc)
+                ? dxcc
+                : (int?)null;
 
             await using var update = connection.CreateCommand();
             update.Transaction = (SqliteTransaction)transaction;
             update.CommandText = """
                 UPDATE qso
-                SET dcl_status=$status, dcl_dxcc=$dxcc, dcl_adif2=$adif2
+                SET dcl_status=$status,
+                    dcl_dxcc=$dxcc,
+                    dcl_adif2=$adif2,
+                    dxcc_entity_id=CASE
+                        WHEN $dxcc=$adif_explicit_non_dxcc OR $dxcc=$dcl_explicit_non_dxcc THEN NULL
+                        ELSE COALESCE(dxcc_entity_id, $dxcc)
+                    END
                 WHERE id=$id;
                 """;
             update.Parameters.AddWithValue("$status", record.Status);
-            update.Parameters.AddWithValue("$dxcc", int.TryParse(record.Dxcc, out var dxcc) ? dxcc : DBNull.Value);
+            update.Parameters.AddWithValue("$dxcc", (object?)parsedDxcc ?? DBNull.Value);
+            update.Parameters.AddWithValue(
+                "$adif_explicit_non_dxcc",
+                DxccIdentityResolver.AdifExplicitNonDxccCode);
+            update.Parameters.AddWithValue(
+                "$dcl_explicit_non_dxcc",
+                DxccIdentityResolver.DclExplicitNonDxccCode);
             update.Parameters.AddWithValue("$adif2", int.TryParse(record.Adif2, out var adif2) ? adif2 : DBNull.Value);
             update.Parameters.AddWithValue("$id", matchedId);
             await update.ExecuteNonQueryAsync(cancellationToken);
@@ -485,6 +532,157 @@ public sealed class SqliteQsoRepository : IQsoRepository
         return result;
     }
 
+    public async Task<DxccIdentityAuditResult> GetDxccIdentityAuditAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, country, dcl_dxcc
+            FROM qso
+            ORDER BY id;
+            """;
+
+        long total = 0;
+        long resolved = 0;
+        long unresolved = 0;
+        var conflicts = new List<DxccIdentityConflict>();
+        var explicitNonDxcc = new List<DxccExplicitNonDxccEvidence>();
+        var evidenceCounts = Enum.GetValues<DxccIdentityEvidence>()
+            .ToDictionary(x => x, _ => 0L);
+        var countryCounts = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var unresolvedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetInt64(0);
+            var country = reader.GetString(1).Trim().ToUpperInvariant();
+            int? dclDxcc = reader.IsDBNull(2) ? null : reader.GetInt32(2);
+            var identity = DxccIdentityResolver.Resolve(country, dclDxcc);
+
+            total++;
+            evidenceCounts[identity.Evidence]++;
+            countryCounts[country] = countryCounts.GetValueOrDefault(country) + 1;
+            switch (identity.State)
+            {
+                case DxccIdentityState.Resolved:
+                    resolved++;
+                    break;
+                case DxccIdentityState.Unresolved:
+                    unresolved++;
+                    unresolvedCodes.Add(country);
+                    break;
+                case DxccIdentityState.ExplicitNonDxcc:
+                    explicitNonDxcc.Add(new DxccExplicitNonDxccEvidence(
+                        id,
+                        country,
+                        identity.UcxEntityId,
+                        identity.DclEntityId!.Value));
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            if (identity.HasConflict)
+                conflicts.Add(new DxccIdentityConflict(
+                    id,
+                    country,
+                    identity.UcxEntityId!.Value,
+                    identity.DclEntityId!.Value,
+                    identity.EffectiveEntityId!.Value));
+        }
+
+        var countries = countryCounts
+            .OrderBy(x => x.Key, StringComparer.Ordinal)
+            .Select(x =>
+            {
+                var entityId = DxccIdentityResolver.ResolveUcxCountry(x.Key);
+                return new DxccCountryAuditRow(
+                    x.Key,
+                    entityId,
+                    x.Value,
+                    entityId is null ? DxccCountryMappingStatus.Unresolved : DxccCountryMappingStatus.Mapped);
+            })
+            .ToArray();
+
+        return new DxccIdentityAuditResult(
+            total,
+            resolved,
+            unresolved,
+            unresolvedCodes.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            conflicts,
+            countries,
+            evidenceCounts)
+        {
+            ExplicitNonDxccEvidence = explicitNonDxcc
+        };
+    }
+
+    public async Task<DxccStatusSnapshot> GetDxccStatusAsync(
+        QsoScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        await InitializeAsync(cancellationToken);
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        var bands = new List<DxccEntityBandStatus>();
+        await using (var aggregate = connection.CreateCommand())
+        {
+            var filters = QsoScopeSql.AddFilters(aggregate, scope).ToList();
+            filters.Insert(0, "q.dxcc_entity_id IS NOT NULL");
+            aggregate.CommandText = $"""
+                SELECT q.dxcc_entity_id,
+                       q.band_code,
+                       COUNT(*),
+                       SUM(CASE WHEN (q.status151_raw & {QsoConfirmationEvaluator.EqslStatus151Mask}) != 0
+                                      OR (q.status161_raw & {QsoConfirmationEvaluator.ClubLogStatus161Mask}) != 0
+                                THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN (q.status151_raw & {QsoConfirmationEvaluator.PaperStatus151Mask}) != 0
+                                      OR (q.status151_raw & {QsoConfirmationEvaluator.LotwStatus151Mask}) != 0
+                                THEN 1 ELSE 0 END)
+                FROM qso q
+                WHERE {string.Join(" AND ", filters)}
+                GROUP BY q.dxcc_entity_id, q.band_code
+                ORDER BY q.dxcc_entity_id, q.band_code;
+                """;
+
+            await using var reader = await aggregate.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                bands.Add(new DxccEntityBandStatus(
+                    reader.GetInt32(0),
+                    reader.GetInt32(1),
+                    reader.GetInt32(2),
+                    reader.GetInt32(3),
+                    reader.GetInt32(4)));
+        }
+
+        int unresolved;
+        await using (var count = connection.CreateCommand())
+        {
+            var filters = QsoScopeSql.AddFilters(count, scope).ToList();
+            filters.Insert(0, $"(q.dcl_dxcc IS NULL OR q.dcl_dxcc NOT IN ({ExplicitNonDxccCodesSql}))");
+            filters.Insert(0, "q.dxcc_entity_id IS NULL");
+            count.CommandText = $"SELECT COUNT(*) FROM qso q WHERE {string.Join(" AND ", filters)};";
+            unresolved = Convert.ToInt32(await count.ExecuteScalarAsync(cancellationToken));
+        }
+
+        int explicitNonDxcc;
+        await using (var count = connection.CreateCommand())
+        {
+            var filters = QsoScopeSql.AddFilters(count, scope).ToList();
+            filters.Insert(0, $"q.dcl_dxcc IN ({ExplicitNonDxccCodesSql})");
+            count.CommandText = $"SELECT COUNT(*) FROM qso q WHERE {string.Join(" AND ", filters)};";
+            explicitNonDxcc = Convert.ToInt32(await count.ExecuteScalarAsync(cancellationToken));
+        }
+
+        return new DxccStatusSnapshot(bands, unresolved, explicitNonDxcc);
+    }
+
     public async Task<QueryResult> ExecuteReadOnlyQueryAsync(string sql, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sql))
@@ -540,7 +738,7 @@ public sealed class SqliteQsoRepository : IQsoRepository
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        command.CommandText = $"""
             SELECT q.source_file, COUNT(*), s.last_imported_utc, s.station_profile_id, p.name
             FROM qso q
             LEFT JOIN source_file s ON s.full_path = q.source_file
@@ -565,77 +763,32 @@ public sealed class SqliteQsoRepository : IQsoRepository
 
     public async Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsByIdsAsync(
         IReadOnlyCollection<long> qsoIds,
-        CancellationToken cancellationToken = default)
-    {
-        if (qsoIds.Count == 0) return Array.Empty<MapQsoPoint>();
-
-        await InitializeAsync(cancellationToken);
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-
-        var names = new List<string>();
-        var i = 0;
-        foreach (var id in qsoIds)
-        {
-            var name = "$id" + i++;
-            names.Add(name);
-            command.Parameters.AddWithValue(name, id);
-        }
-
-        command.CommandText = $"""
-            SELECT q.id,q.source_file,q.callsign,q.qso_date,q.start_time,q.band_code,q.mode_code,
-                   q.locator,q.latitude,q.longitude,p.name,p.latitude,p.longitude,g.distance_km,g.bearing_deg
-            FROM qso q
-            LEFT JOIN source_file sf ON sf.full_path=q.source_file
-            LEFT JOIN station_profile p ON p.id=COALESCE(q.station_profile_id,sf.station_profile_id)
-            LEFT JOIN qso_geo_cache g ON g.qso_id=q.id AND g.station_profile_id=p.id
-            WHERE q.id IN ({string.Join(",", names)})
-              AND q.latitude IS NOT NULL AND q.longitude IS NOT NULL AND p.id IS NOT NULL
-            ORDER BY q.qso_date,q.start_time,q.id;
-            """;
-
-        var result = new List<MapQsoPoint>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            result.Add(new MapQsoPoint(
-                reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-                reader.GetInt32(5), reader.GetInt32(6), reader.GetString(7), reader.GetDouble(8), reader.GetDouble(9),
-                reader.GetString(10), reader.GetDouble(11), reader.GetDouble(12),
-                reader.IsDBNull(13) ? null : reader.GetDouble(13),
-                reader.IsDBNull(14) ? null : reader.GetDouble(14)));
-        return result;
-    }
+        CancellationToken cancellationToken = default) =>
+        await GetMapQsoPointsAsync(QsoScope.ForQsoIds(qsoIds), cancellationToken);
 
     public async Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsAsync(
         IReadOnlyCollection<string>? sourceFiles = null,
         DateTime? fromUtc = null,
         CancellationToken cancellationToken = default)
     {
+        var scope = sourceFiles is null ? QsoScope.All : QsoScope.ForSources(sourceFiles);
+        if (fromUtc is { } lowerBound)
+            scope = scope.WithFromUtc(lowerBound);
+        return await GetMapQsoPointsAsync(scope, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsAsync(
+        QsoScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
         await InitializeAsync(cancellationToken);
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
         var filters = new List<string> { "q.latitude IS NOT NULL", "q.longitude IS NOT NULL", "p.id IS NOT NULL" };
-        if (sourceFiles is { Count: > 0 })
-        {
-            var names = new List<string>();
-            var i = 0;
-            foreach (var source in sourceFiles)
-            {
-                var name = "$src" + i++;
-                names.Add(name);
-                command.Parameters.AddWithValue(name, source);
-            }
-            filters.Add($"q.source_file IN ({string.Join(",", names)})");
-        }
-        if (fromUtc is not null)
-        {
-            filters.Add("(q.qso_date > $fromDate OR (q.qso_date = $fromDate AND q.start_time >= $fromTime))");
-            command.Parameters.AddWithValue("$fromDate", fromUtc.Value.ToString("yyyy-MM-dd"));
-            command.Parameters.AddWithValue("$fromTime", fromUtc.Value.ToString("HH:mm:ss"));
-        }
+        filters.AddRange(QsoScopeSql.AddFilters(command, scope));
 
         command.CommandText = $"""
             SELECT q.id,q.source_file,q.callsign,q.qso_date,q.start_time,q.band_code,q.mode_code,
@@ -870,13 +1023,13 @@ public sealed class SqliteQsoRepository : IQsoRepository
         var q = item.Qso;
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
+        command.CommandText = $"""
             INSERT INTO qso (
                 source_file, source_record_index, source_record_hash, record_type_raw,
                 qso_date, start_time, end_time, callsign,
                 sent_rst, sent_exchange, received_rst, received_exchange,
                 band_code, mode_code, rx_frequency_hz, qth, name, remarks,
-                status151_raw, country, continent_code, status161_raw,
+                status151_raw, country, dxcc_entity_id, continent_code, status161_raw,
                 multiplier1, multiplier2, points,
                 locator, latitude, longitude, grid2, grid4, grid6, grid8,
                 iota_number, iota_continent_code, district, cq_zone, itu_zone,
@@ -887,7 +1040,7 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 $qso_date, $start_time, $end_time, $callsign,
                 $sent_rst, $sent_exchange, $received_rst, $received_exchange,
                 $band_code, $mode_code, $rx_frequency_hz, $qth, $name, $remarks,
-                $status151_raw, $country, $continent_code, $status161_raw,
+                $status151_raw, $country, $dxcc_entity_id, $continent_code, $status161_raw,
                 $multiplier1, $multiplier2, $points,
                 $locator, $latitude, $longitude, $grid2, $grid4, $grid6, $grid8,
                 $iota_number, $iota_continent_code, $district, $cq_zone, $itu_zone,
@@ -913,6 +1066,12 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 remarks=excluded.remarks,
                 status151_raw=excluded.status151_raw,
                 country=excluded.country,
+                dxcc_entity_id=CASE
+                    WHEN qso.dcl_dxcc IN ({ExplicitNonDxccCodesSql}) THEN NULL
+                    WHEN excluded.dxcc_entity_id IS NOT NULL THEN excluded.dxcc_entity_id
+                    WHEN qso.dcl_dxcc IN ({KnownNormalDxccEntityIdsSql}) THEN qso.dcl_dxcc
+                    ELSE NULL
+                END,
                 continent_code=excluded.continent_code,
                 status161_raw=excluded.status161_raw,
                 multiplier1=excluded.multiplier1,
@@ -960,6 +1119,9 @@ public sealed class SqliteQsoRepository : IQsoRepository
         command.Parameters.AddWithValue("$remarks", q.Remarks);
         command.Parameters.AddWithValue("$status151_raw", q.Status151Raw);
         command.Parameters.AddWithValue("$country", q.Country);
+        command.Parameters.AddWithValue(
+            "$dxcc_entity_id",
+            (object?)DxccIdentityResolver.ResolveUcxCountry(q.Country) ?? DBNull.Value);
         command.Parameters.AddWithValue("$continent_code", q.ContinentCode);
         command.Parameters.AddWithValue("$status161_raw", q.Status161Raw);
         command.Parameters.AddWithValue("$multiplier1", q.Multiplier1);
@@ -986,6 +1148,109 @@ public sealed class SqliteQsoRepository : IQsoRepository
         command.Parameters.AddWithValue("$award2", q.Award2);
         command.Parameters.AddWithValue("$count2", q.Count2);
 
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task EnsureDxccBackfillAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const string metadataKey = "dxcc_country_mapping_version";
+        string? currentVersion;
+        await using (var read = connection.CreateCommand())
+        {
+            read.CommandText = "SELECT value FROM ucxstats_metadata WHERE key=$key;";
+            read.Parameters.AddWithValue("$key", metadataKey);
+            currentVersion = (string?)await read.ExecuteScalarAsync(cancellationToken);
+        }
+
+        var requiredVersion = DxccIdentityResolver.MappingVersion.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        if (currentVersion == requiredVersion)
+            return;
+
+        using var transaction = connection.BeginTransaction();
+        await ResetDxccIdentitiesFromAvailableEvidenceAsync(connection, transaction, cancellationToken);
+
+        await using var write = connection.CreateCommand();
+        write.Transaction = transaction;
+        write.CommandText = """
+            INSERT INTO ucxstats_metadata(key,value) VALUES($key,$value)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+            """;
+        write.Parameters.AddWithValue("$key", metadataKey);
+        write.Parameters.AddWithValue("$value", requiredVersion);
+        await write.ExecuteNonQueryAsync(cancellationToken);
+        transaction.Commit();
+    }
+
+    private static async Task EnsureDxccIdentityResolutionPolicyAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const string metadataKey = "dxcc_identity_resolution_policy_version";
+        const string requiredVersion = "2";
+
+        await using (var read = connection.CreateCommand())
+        {
+            read.CommandText = "SELECT value FROM ucxstats_metadata WHERE key=$key;";
+            read.Parameters.AddWithValue("$key", metadataKey);
+            if ((string?)await read.ExecuteScalarAsync(cancellationToken) == requiredVersion)
+                return;
+        }
+
+        using var transaction = connection.BeginTransaction();
+        await ResetDxccIdentitiesFromAvailableEvidenceAsync(connection, transaction, cancellationToken);
+
+        await using (var write = connection.CreateCommand())
+        {
+            write.Transaction = transaction;
+            write.CommandText = """
+                INSERT INTO ucxstats_metadata(key,value) VALUES($key,$value)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+                """;
+            write.Parameters.AddWithValue("$key", metadataKey);
+            write.Parameters.AddWithValue("$value", requiredVersion);
+            await write.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        transaction.Commit();
+    }
+
+    private static async Task ResetDxccIdentitiesFromAvailableEvidenceAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        var countryCases = new List<string>();
+        var i = 0;
+        foreach (var mapping in DxccIdentityResolver.ExplicitCountryMappings.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var countryParameter = $"$dxcc_country_{i}";
+            var entityParameter = $"$dxcc_entity_{i}";
+            countryCases.Add($"WHEN {countryParameter} THEN {entityParameter}");
+            command.Parameters.AddWithValue(countryParameter, mapping.Key);
+            command.Parameters.AddWithValue(entityParameter, mapping.Value);
+            i++;
+        }
+
+        command.CommandText = $"""
+            UPDATE qso
+            SET dxcc_entity_id = CASE
+                WHEN dcl_dxcc IN ({ExplicitNonDxccCodesSql}) THEN NULL
+                ELSE COALESCE(
+                    CASE UPPER(TRIM(country))
+                    {string.Join(Environment.NewLine, countryCases)}
+                    ELSE NULL
+                    END,
+                    CASE
+                        WHEN dcl_dxcc IN ({KnownNormalDxccEntityIdsSql}) THEN dcl_dxcc
+                        ELSE NULL
+                    END)
+            END;
+            """;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

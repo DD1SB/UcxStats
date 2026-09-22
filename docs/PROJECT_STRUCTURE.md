@@ -20,17 +20,37 @@ UcxStats/
 │   │       ├── UcxRecordValidator.cs
 │   │       └── ...
 │   ├── UcxStats.Data/
-│   │   └── Database/
-│   │       ├── IQsoRepository.cs
-│   │       ├── QsoImportRecord.cs
-│   │       └── SqliteQsoRepository.cs
+│   │   ├── Confirmation/
+│   │   ├── Database/
+│   │   │   ├── IQsoRepository.cs
+│   │   │   ├── QsoScope.cs
+│   │   │   ├── QsoImportRecord.cs
+│   │   │   └── SqliteQsoRepository.cs
+│   │   └── Dxcc/
+│   │       ├── Adif317DxccCatalog.Generated.cs
+│   │       ├── UcxLog850CountryDxccMappings.Generated.cs
+│   │       ├── DxccEntityCatalog.cs
+│   │       ├── DxccGeoJsonLoader.cs
+│   │       ├── DxccIdentityResolver.cs
+│   │       ├── UcxCountryDxccMapping.cs
+│   │       └── DxccStatusModels.cs
 │   ├── UcxStats.Geo/
 │   │   └── Maidenhead/
+│   ├── UcxStats.Map/
+│   │   ├── DxccMapConfiguration.cs
+│   │   ├── DxccMapPayload.cs
+│   │   └── MapPageBuilder.cs
 │   └── UcxStats.Wpf/
+│       ├── DxccMapSettingsWindow.xaml
+│       ├── MapWindow.xaml
 │       ├── MainWindow.xaml
 │       └── MainWindow.xaml.cs
 ├── tests/
+│   ├── UcxStats.Data.Tests/
 │   └── UcxStats.SmokeTest/
+├── tools/
+│   ├── generate-dxcc-catalog.sh
+│   └── generate-ucx-dxcc-mapping.sh
 ├── DONE.md
 ├── TODO.md
 ├── README.md

@@ -14,5 +14,6 @@
     <ProjectReference Include="..\UcxStats.Core\UcxStats.Core.csproj" />
     <ProjectReference Include="..\UcxStats.Data\UcxStats.Data.csproj" />
     <ProjectReference Include="..\UcxStats.Geo\UcxStats.Geo.csproj" />
+    <ProjectReference Include="..\UcxStats.Map\UcxStats.Map.csproj" />
   </ItemGroup>
 </Project>

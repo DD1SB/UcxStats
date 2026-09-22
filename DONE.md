@@ -142,3 +142,27 @@
 
 
 - v0.12.3.3: fixed WebView2/OSM tile-policy integration with a local HTTPS virtual host, identifiable UA and configurable tile provider.
+
+## DXCC overlay foundation (data/model phase)
+
+- [x] Added shared, source-preserving QSO confirmation flags while retaining existing WAE `Paper OR LoTW OR eQSL OR ClubLog OR DCL` behavior.
+- [x] Added nullable `qso.dxcc_entity_id`, versioned safe backfill, and `(dxcc_entity_id, band_code)` index.
+- [x] Added conservative explicit UCX-country mapping plus unresolved-code and DCL/UCX conflict audit API.
+- [x] Extended the explicit UCX-country mapping to version 2 using the 188-code real-database audit, with direct/alias/historical classification metadata and no callsign-prefix inference.
+- [x] Replaced the snapshot-derived table with generated UCX mapping version 3 from the official UcxLog 8.50 country resource: 340 Current, 62 Deleted and 50 explicitly unresolved WAE/R150S-only labels; added deterministic source/audit metadata and R1FJ import/backfill/aggregation coverage.
+- [x] Kept DXCC and WAE identity separate; `WaeEntityResolver` and `APP_DCL_ADIF2` subdivision handling are unchanged.
+- [x] Added `QsoScope` and locator-independent entity/band DXCC aggregate repository API.
+- [x] Added five-state DXCC overlay model; DCL-only confirmation does not promote overlay status.
+- [x] Added external GeoJSON validation and exact-hash AmazingProducer normalization without bundling or SQLite geometry storage.
+- [x] Replaced the minimal catalog with a deterministic complete catalog generated from Released ADIF 3.1.7 machine-readable resources (340 Current, 62 Deleted, plus explicit non-DXCC code 0).
+- [x] Added focused automated tests for confirmation, WAE compatibility, identity, scopes, aggregation, migration, catalog behavior, and GeoJSON validation/normalization.
+
+## DXCC Leaflet overlay
+
+- [x] Added persistent external-GeoJSON selection and validation at `%LOCALAPPDATA%\UcxStats\map-dxcc.json`; no geometry is bundled.
+- [x] Added exact `QsoScope` propagation for source, selected-row, SQL-result, single-window, multi-window, and Live Map entry points.
+- [x] Added normalized GeoJSON staging through the existing WebView2 virtual HTTPS host and a resident numeric-ID-indexed Leaflet layer outside `fitBounds`.
+- [x] Added an optional custom-control checkbox, dedicated pane, five color/outline states, compact legend, selected-band restyling, and entity popups.
+- [x] Added complete compact aggregate snapshot transfer and Live Map status refresh independent of locator-backed marker changes.
+- [x] Preserved tiles, markers, short/long paths, day/night shading, map synchronization, fullscreen, and independent per-window overlay visibility.
+- [x] Added browser-neutral configuration, normalized-geometry, payload, generated-page, pane/order, scope, and regression tests.
