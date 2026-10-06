@@ -1,178 +1,133 @@
-# UcxStats – TODO
+# Todo
 
-Open development tasks and ideas only. Completed work belongs in `DONE.md`.
+## Parser / reverse engineering
 
-## Near term
+- [ ] Add small 364-byte regression fixtures for normal, contest, CW/SSB/FT8 and microwave/SAT records.
+- [ ] Determine whether record byte 0 should be exposed as `IsNormalLogRecord`, `IsContestRecord`, or kept raw.
+- [ ] Keep status `151 & 0x10`, `151 & 0x04`, and `161 & 0x80` unknown until independently proven.
+- [ ] Determine the semantic purpose of offset 243 and the structurally recognized unknown strings around 162, 255 and 261.
+- [ ] Confirm remaining band IDs (30 m / 70 cm / 23 cm / 13 cm / 3.4 GHz / 5.6 GHz) with real or controlled records.
+- [ ] Identify UcxLog's codes for `unbestimmt` and `Rest` if useful.
 
-### DXCC map overlay
+## v0.4 - statistics / UI
 
-- [ ] Complete Windows/WebView2 acceptance testing with real log data after
-  the polygon-popup interaction fix:
-  - normal map and Live Map;
-  - band switching;
-  - polygon popups over empty entity areas and after band changes;
-  - locator-less QSOs;
-  - day/night interaction;
-  - short/long paths;
-  - synchronized and independent map windows;
-  - single-window reuse;
-  - Pacific/date-line behavior.
-- [ ] If repeated-world DXCC vectors become important, design and test an
-  antimeridian/world-copy strategy. The current implementation deliberately
-  renders one correct primary-world vector copy.
-- [ ] Review DXCC overlay styling after practical use:
-  - reduce polygon fill opacity;
-  - use thinner / less dominant borders;
-  - make `NotWorked` more prominent than already credited entities;
-  - retain color + line-style distinctions for accessibility;
-  - reduce the salmon/pink appearance of transparent red areas;
-  - consider `Subtle` / `Balanced` / `Strong` style presets;
-  - review legend size and visual weight.
-- [ ] Consider QSO/result drill-down from DXCC entity popups after the basic
-  overlay UX has settled.
-
-### Map
-
-- [ ] Add optional zoom-dependent Maidenhead grid overlay.
-- [ ] Add mode filtering to the map.
-- [ ] Review optional date/time filtering for normal map views beyond the
-  existing Live Map start-time scope.
-- [ ] Add optional aggregation/clustering if dense QSO displays require it.
-- [ ] Add a small UI for selecting/editing tile providers instead of requiring
-  manual `map-tiles.json` editing.
-- [ ] Consider an optional API-key-based tile provider as a user-configured
-  fallback, never as a hard-coded dependency.
-- [ ] Consider persisting the single-map-window preference.
-- [ ] Future 2.x: optional historical day/night/terminator rendering at an
-  individual QSO timestamp.
-- [ ] Add OBS/browser-source-friendly presentation, ideally with optional
-  transparent background.
-- [ ] Consider optional HTTP/WebSocket live updates for external
-  browser/projector/stream clients.
-
-## Awards / diplomas
-
-### WAE
-
-- [ ] Add WAE Trophy variant to the existing WAE engine.
-- [ ] Add WAE Classic variant.
-- [ ] Visually distinguish entities that have reached the full five-band
-  score; do not rely on color alone.
-- [ ] Extend Sicily special-call handling if a reliable UcxLog/DCL source for
-  non-IT9/IB9 WAE assignments is identified.
-
-### Generic award infrastructure
-
-- [ ] Continue evolving the reusable award-rule framework after additional
-  real award evaluators have been implemented.
-- [ ] Add reusable award/query templates where they simplify real diploma
-  requirements.
-- [ ] Add generic MEMBER-list support for member-based awards such as W-DIG-M.
-- [ ] Integrate award results with query/result/map workflows.
-- [ ] Avoid adding one main-window button per award; use the existing award
-  selection/list concept.
-- [ ] Highlight actionable award progress, e.g. missing entities or remaining
-  band points, without relying solely on color.
-
-## DCL
-
-- [ ] Move large DCL matching/import operations to a background or set-based
-  operation with progress reporting so the UI remains responsive.
-- [ ] Continue reviewing unmatched and ambiguous DCL diagnostics against real
-  exports; add matching fallbacks only when justified by evidence.
-- [ ] Add an explicit manual assignment workflow for genuine multiple
-  candidates or mode differences.
-- [ ] Reuse the general progress UI for large DCL/import operations.
-
-## Queries / statistics
-
-- [ ] Add a database-backed QSO table/filtering workflow where useful beyond
-  the current file/source-oriented views.
-- [ ] Add selected-QSO detail view for:
-  - RST/exchange;
-  - QSL/confirmation sources;
-  - IOTA;
-  - district;
-  - QSL manager;
-  - award fields;
-  - contest-specific fields.
-- [ ] Add additional fixed statistics views based on actual usage.
-- [ ] Add read-only expert SQL mode (`SELECT` / `WITH` only).
+- [ ] Add selected-QSO detail panel for RST/exchange, QSL, IOTA, district, manager, awards and contest fields.
+- [ ] Add database-backed QSO table/filtering instead of displaying only the just-opened file.
+- [ ] Add first fixed statistics views.
+- [ ] Add expert free-form read-only SQL query view (`SELECT` / `WITH` only).
 - [ ] Add saved queries.
-- [ ] Add schema/help panel for the query system.
-- [ ] Later derive a visual query builder from recurring real-world queries.
-- [ ] Allow query/filter results to feed the common
-  QSO-selection-to-visualisation pipeline.
-- [ ] Add polar/azimuth statistics and further map integration.
-- [ ] Add band toggles/legend to the azimuth-distance view.
+- [ ] Later derive a visual query builder from real recurring queries.
+- [ ] Add configurable own station locator/location.
+- [ ] Persist distance and initial bearing after station location is configured.
 
-## Live synchronization
+## v0.5 - live synchronization
 
-- [ ] Watch active UCX log files for size/content changes where the current
-  Live Map/import workflow does not already cover the requirement.
-- [ ] Add fast-path handling for appended 364-byte records if measurements
-  show it is useful.
-- [ ] Detect modified/deleted UCX records using stable per-record identity or
-  hashes.
-- [ ] Synchronize UCX file truncation/deletion with the database safely.
-- [ ] Publish newly imported/changed QSOs through a reusable internal update
-  mechanism for UI/map consumers.
+- [ ] Watch active UCX log files for size/content changes.
+- [ ] Fast-path appended 364-byte records.
+- [ ] Detect modified/deleted records via per-record hashes.
+- [ ] Publish newly imported/changed QSOs to UI/map clients.
 
-## Geo / station context
+## Map / presentation
 
-- [ ] Add UI for per-QSO station-profile override.
-- [ ] Surface cached distance/bearing more broadly in QSO details and
-  statistics.
-- [ ] Review whether short-/long-path geometry should be persisted/cached
-  outside the render path.
-- [ ] Measure Geo rebuild runtime and storage load with substantially more
-  than 10,000 QSOs.
-- [ ] If necessary, tune chunking/batch sizes and SQLite WAL/PRAGMA settings.
-- [ ] Reuse background-job/progress infrastructure for large imports,
-  migrations and Geo rebuilds.
+- [ ] Implement Leaflet as a small web application hosted by UcxStats and display it through WebView2/browser.
+- [ ] Add event filter from UTC date/time, optional end time, and all-QSO demo mode.
+- [ ] Cache locator coordinates and short-/long-path geometry outside the render loop.
+- [ ] Generate geodetic short path and long path in the .NET geo layer.
+- [ ] Add true fullscreen presentation mode for second monitor/projector.
+- [ ] Add OBS/browser-source-friendly overlay, ideally with optional transparent background.
+- [ ] Add optional HTTP/WebSocket live updates for browser/projector/stream clients.
 
-## UCX parser / reverse engineering
+## Later
 
-Keep unknown fields unknown until independently proven.
+- [ ] Award-rule/query system.
+- [ ] Contest-aware views without excluding contest QSOs from normal statistics.
+- [ ] Optional QTC parser/importer for contest-specific statistics.
 
-- [ ] Add small 364-byte regression fixtures for:
-  - normal log records;
-  - contest records;
-  - CW;
-  - SSB;
-  - FT8;
-  - microwave;
-  - SAT.
-- [ ] Determine whether record byte `0` should be exposed as
-  `IsNormalLogRecord`, `IsContestRecord`, or remain raw.
-- [ ] Determine the meaning of status bits:
-  - `151 & 0x10`;
-  - `151 & 0x04`;
-  - `161 & 0x80`.
-- [ ] Determine the semantic purpose of offset `243`.
-- [ ] Investigate the structurally recognized unknown strings around offsets
-  `162`, `255`, and `261`.
-- [ ] Confirm remaining band IDs with real or controlled records:
-  - 30 m;
-  - 70 cm;
-  - 23 cm;
-  - 13 cm;
-  - 3.4 GHz;
-  - 5.6 GHz.
-- [ ] Identify UcxLog codes for `unbestimmt` and `Rest` if they become useful.
 
-## Contest-specific features
+## Nach V0.4
+- Quellen gezielt aus Datenbank laden/filtern, nicht nur beim aktuellen Dateiimport anzeigen
+- Dateiverkleinerung/Löschen von UCX-Records synchronisieren
+- Live-Watcher für neue/geänderte Records
+- QSO-Detailansicht
+- freie read-only SQL-Abfrage nach stabilem Schema
 
-- [ ] Add contest-aware views without excluding contest QSOs from normal
-  statistics.
-- [ ] Add optional QTC parser/importer for contest-specific statistics.
+## v0.6 Geo / station context
+- Add station profiles (home / portable / event locations).
+- Allow a default station profile per UCX source.
+- Allow an optional per-QSO station-profile override.
+- Cache distance, bearing and later short/long-path geometry by QSO + station profile.
 
-## Longer-term ideas
 
-- [ ] Historical per-QSO propagation/context views.
-- [ ] Additional map overlays where they provide practical operating value.
-- [ ] Consider a future WAE-specific geometry overlay while preserving the
-  strict separation between DXCC entities and WAE-only subdivisions.
-- [ ] If additional interactive polygon overlays are introduced, replace
-  per-overlay click fallbacks with a shared vector interaction/hit-test
-  architecture.
+## After v0.6
+- UI for per-QSO station profile override
+- Surface cached distance/bearing in details/statistics
+- Polar/azimuth statistics and map integration
+- Short-/long-path geometry cache
+
+
+## Nach v0.6.2 beobachten
+
+- Laufzeit und Datenträgerlast beim Geo-Rebuild mit >10.000 QSOs messen.
+- Falls nötig: Chunking/Batch-Größe und WAL/PRAGMA-Tuning weiter optimieren.
+- Background-Job-Infrastruktur später für große Imports/Migrationen wiederverwenden.
+
+- Map: date/time filter, long-path geometry, graticule, band/mode filters, live refresh and optional aggregation/clustering.
+- Reuse background progress UI for large multi-file imports.
+
+- Map follow-up: date/time filter, long-path, graticule, live refresh, stream/overlay view.
+
+- Map: date/time filter, long-path, graticule, mode filters, live refresh, aggregation/clustering.
+- Consider persisting the single-map-window preference.
+
+- Maidenhead grid overlay (zoom-dependent).
+- Map date/time and mode filters; live refresh.
+- Add band toggles/legend to the azimuth-distance view.
+
+- Maidenhead grid overlay remains optional for a later release.
+
+- Later: query/filter builder can feed the same QSO-selection-to-visualisation pipeline.
+
+- Maidenhead grid overlay remains optional for a later release.
+
+- Future (2.x): optional day/night/terminator rendering at an individual QSO's timestamp.
+- Map later: Maidenhead grid overlay.
+
+
+- Reuse the general progress UI for large multi-file imports.
+- Queries/statistics: read-only SQL expert mode, saved queries, result table and result-to-map pipeline.
+- Awards/diploma evaluation on top of the query layer.
+- v2.x candidate: historical day/night terminator calculated for individual QSO timestamps.
+
+- v0.12: first diploma/award views and reusable query templates based on real award requirements.
+- Add friendly schema/help panel and later a visual query builder after recurring query patterns are known.
+
+
+- WAE: Trophy and Classic variants on the same engine.
+- WAE: extend Sicily special-call mapping when a reliable UcxLog/DCL source for non-IT9/IB9 special calls is identified.
+- Awards: generic MEMBER-list provider for member-based awards such as W-DIG-M.
+- Awards: map/result integration and reusable award-rule framework after the first real award evaluators settle.
+
+- DCL: review unmatched/ambiguous import diagnostics against real exports and add safe matching fallbacks only where justified.
+
+- DCL import: move the 7k+ matching run to a background/set-based operation with progress reporting.
+
+- Awards/WAE: visually highlight entities that have reached the full 5 band points (not by color alone).
+- DCL: add explicit manual assignment workflow for mode differences and genuine multiple candidates.
+- DCL: background/set-based import with progress so the UI remains responsive.
+
+
+- Map: add a small UI for selecting/editing tile providers instead of requiring manual `map-tiles.json` editing.
+- Map: consider an optional provider requiring an API key only as a user-configured fallback, not a hard-coded dependency.
+
+## DXCC overlay next phase
+
+- [x] Audit the exported real-database country counts and add explicit mapping version 2 for all 188 observed, unambiguous UCX country classifications. Rerun `dxcc-audit` against the database to refresh exact DCL/UCX conflict totals after migration.
+- [x] Replace snapshot-derived mapping version 2 with complete generated mapping version 3 from the official UcxLog 8.50 country resource, including current/deleted validation, unresolved WAE/R150S inventory, and R1FJ regression coverage.
+- [x] Generate the complete offline Current/Deleted catalog from the Released ADIF 3.1.7 machine-readable DXCC enumeration; unlisted IDs remain `Unknown`.
+- [x] Add configuration/file selection for the external user-provided `dxcc.geojson`; do not bundle the AmazingProducer data without redistribution clearance.
+- [x] Add the optional Leaflet `DXCC status` layer below paths/markers, load normalized geometry once per page, and keep it outside `fitBounds`.
+- [x] Add the `ucxSetDxccStatus`, `ucxSetDxccVisible`, and `ucxRefreshDxccStyles` page contracts and restyle resident polygons when selected bands change.
+- [x] Add non-color visual distinctions and entity popups with ID, name, status, QSO count, worked bands, and confirmed bands.
+- [x] Integrate complete aggregate snapshots with normal map refresh and Live Map without changing existing incremental marker/path behavior.
+- [ ] Runtime-test the eventual WebView2/Leaflet overlay on Windows; Linux validation covers build/data tests only.
+- [ ] If repeated-world DXCC vectors become important, design a tested antimeridian/world-copy strategy; the first implementation deliberately renders one correct primary-world vector copy.
