@@ -170,6 +170,16 @@ public sealed class DxccMapIntegrationTests
     }
 
     [Fact]
+    public void GeneratedMapLoadsBundledLeafletFromTheLocalOrigin()
+    {
+        var html = BuildPage(geometryAvailable: false);
+
+        Assert.Contains("href=\"leaflet/leaflet.css\"", html);
+        Assert.Contains("src=\"leaflet/leaflet.js\"", html);
+        Assert.DoesNotContain("unpkg.com", html);
+    }
+
+    [Fact]
     public void GeneratedMapShowsUnavailableControlWithoutRemovingExistingFeatures()
     {
         var html = BuildPage(geometryAvailable: false);

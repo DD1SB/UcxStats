@@ -16,4 +16,9 @@
     <ProjectReference Include="..\UcxStats.Geo\UcxStats.Geo.csproj" />
     <ProjectReference Include="..\UcxStats.Map\UcxStats.Map.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\Leaflet\**\*"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

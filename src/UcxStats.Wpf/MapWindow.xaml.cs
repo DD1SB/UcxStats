@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 using UcxStats.Data.Database;
 using UcxStats.Data.Dxcc;
 using UcxStats.Map;
@@ -52,6 +53,14 @@ public partial class MapWindow : Window
             "MapWeb",
             _syncId.ToString("N"));
         Directory.CreateDirectory(_mapWebFolder);
+        // Keep the shared browser profile outside the replaceable installation directory.
+        MapWebView.CreationProperties = new CoreWebView2CreationProperties
+        {
+            UserDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "UcxStats", "WebView2")
+        };
+        CopyMapAssets();
         HeaderText.Text = title;
         Loaded += MapWindow_Loaded;
         Closed += MapWindow_Closed;
@@ -383,7 +392,19 @@ public partial class MapWindow : Window
 
         var userAgent = core.Settings.UserAgent ?? string.Empty;
         if (!userAgent.Contains("UcxStats/", StringComparison.OrdinalIgnoreCase))
-            core.Settings.UserAgent = $"{userAgent} UcxStats/0.12.3.3".Trim();
+            core.Settings.UserAgent = $"{userAgent} UcxStats/{typeof(App).Assembly.GetName().Version}".Trim();
+    }
+
+    private void CopyMapAssets()
+    {
+        var sourceFolder = Path.Combine(AppContext.BaseDirectory, "Assets", "Leaflet");
+        var destinationFolder = Path.Combine(_mapWebFolder, "leaflet");
+        foreach (var source in Directory.EnumerateFiles(sourceFolder, "*", SearchOption.AllDirectories))
+        {
+            var destination = Path.Combine(destinationFolder, Path.GetRelativePath(sourceFolder, source));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(source, destination, overwrite: true);
+        }
     }
 
     private void NavigateMap(IReadOnlyList<MapQsoPoint> points, MapDxccPageOptions dxcc)

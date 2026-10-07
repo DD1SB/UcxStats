@@ -35,6 +35,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public MainWindow()
     {
         InitializeComponent();
+        Title = $"UcxStats v{typeof(App).Assembly.GetName().Version}";
         DataContext = this;
         Loaded += async (_, _) => { await RefreshDatabaseSummaryAsync(); await RefreshProfilesAsync(); };
     }

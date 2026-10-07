@@ -53,3 +53,16 @@ EBWebView/
 publish/
 packages/
 *.zip
+
+# Installer staging, Inno compiler output and release transfer bundles
+installer-output/
+output/
+*.Setup.exe
+UcxStats-Setup-*-win-x64.exe*
+*.zip.sha256
+*.7z
+*.tar.gz
+
+# Python publish-validator caches
+__pycache__/
+*.py[cod]

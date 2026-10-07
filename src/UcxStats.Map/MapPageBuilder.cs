@@ -28,7 +28,7 @@ public static class MapPageBuilder
 
         return $$$"""
 <!doctype html><html><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="leaflet/leaflet.css">
 <style>
 html,body,#map{height:100%;margin:0}body{font-family:Segoe UI,Arial,sans-serif}.leaflet-popup-content{line-height:1.35}
 .ucx-control{background:#fff;padding:8px 10px;border-radius:4px;box-shadow:0 1px 5px #777;max-height:70vh;overflow:auto;min-width:165px}
@@ -41,7 +41,7 @@ html,body,#map{height:100%;margin:0}body{font-family:Segoe UI,Arial,sans-serif}.
 .ucx-dxcc-popup-title{font-weight:700;font-size:14px}.ucx-dxcc-popup-meta{color:#555;margin-bottom:7px}.ucx-dxcc-popup-section{margin-top:5px}
 </style>
 </head><body><div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="leaflet/leaflet.js"></script>
 <script>
 const qsos={{{qsoJson}}};
 const initialDxccStatus={{{dxccStatusJson}}};

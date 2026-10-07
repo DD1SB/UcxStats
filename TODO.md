@@ -1,5 +1,36 @@
 # Todo
 
+## Windows installer release verification
+
+- [ ] Verify remaining standalone packaging variants with Inno Setup 6.7.3 and both
+  Windows PowerShell 5.1 and PowerShell 7, from an unrelated current directory
+  and an extraction path containing spaces; no repository or .NET SDK present.
+- [ ] Verify compiler discovery, non-zero compilation failure codes, unsigned EXE
+  reproducibility across separate extractions and version metadata.
+- [ ] Verify incompatible compiler rejection and the ISPP version probe with zeroed
+  FileVersion/ProductVersion under both supported PowerShell versions; require 6.7.3.
+- [ ] Complete remaining [Windows installer smoke tests](docs/WINDOWS_INSTALLER.md):
+  missing/present WebView2, normal-user install, Start Menu/desktop shortcuts,
+  ordinary maps, optional external DXCC overlay, offline/local-asset behavior,
+  map synchronization/fullscreen and WebView2 profile location. Baseline installation,
+  startup, Live Map OSM tiles, markers, paths and self-contained .NET passed the
+  user-reported clean-Windows test recorded in DONE.
+- [ ] Test upgrade and same-version reinstall, stable installation identity,
+  in-use application handling and the downgrade guard.
+- [ ] Test uninstall and reinstall; verify program files/shortcuts/uninstall entry
+  removal while SQLite databases, logs, user configuration, tile-provider settings,
+  DXCC settings and external GeoJSON paths/files remain preserved across upgrade
+  and uninstall. Record data hashes/counts before and after.
+- [ ] Record the remaining Windows-only results before distributing a release;
+  Linux packaging validation and PowerShell preview are not installation tests.
+
+## First-run DXCC configuration message
+
+- [ ] Improve the prominent Live Map message about missing `map-dxcc.json` on a
+  fresh installation: show no warning when DXCC was never configured, provide useful
+  diagnostics only when a previously configured resource is missing or invalid,
+  and do not continuously display configuration paths in the Live Map status line.
+
 ## Parser / reverse engineering
 
 - [ ] Add small 364-byte regression fixtures for normal, contest, CW/SSB/FT8 and microwave/SAT records.

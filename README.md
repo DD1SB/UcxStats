@@ -24,10 +24,35 @@ SQLite is stored by default at:
 ## Requirements
 
 - Windows x64
-- .NET 10 SDK 10.0.400 (see `global.json`)
+- For source builds: the .NET 10 SDK pinned in `global.json`
+- Microsoft Edge WebView2 Evergreen Runtime for maps
 - VS Code + C# Dev Kit, or Visual Studio
 
 v0.5.2 uses `Microsoft.Data.Sqlite` 10.0.11.
+
+For the self-contained Windows installer, reproducible Linux publishing, prerequisites,
+upgrades and data-preserving uninstall, see [Windows installer pipeline](docs/WINDOWS_INSTALLER.md).
+Installed releases include .NET/WPF; end users do not need to install the .NET SDK.
+
+The installer packaging workflow is standalone:
+
+```text
+Linux:   ./tools/publish-win-x64.sh
+         → artifacts/UcxStats-Packaging-<version>-win-x64.zip (+ SHA-256)
+Windows: extract ZIP anywhere → package.ps1 → output/UcxStats-Setup-<version>-win-x64.exe
+```
+
+Windows packaging needs only PowerShell 5.1/7 and Inno Setup 6.7.3. The ZIP includes
+its scripts, resolved version metadata, validation policy and complete payload;
+no Git checkout, source files, .NET SDK or NuGet cache is required. From any folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Build Folder\package.ps1'
+```
+
+After reviewing the script, this execution-policy option applies to that process
+only; no permanent machine-wide change or elevation is required. Organizational
+Group Policy still applies. See the installer guide and the ZIP's `README.txt`.
 
 ## Build and run
 

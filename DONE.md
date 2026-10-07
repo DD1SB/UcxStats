@@ -1,5 +1,31 @@
 # Done
 
+## Standalone Windows installer packaging
+
+- [x] User-confirmed clean-Windows smoke test (2026-10-08): the standalone
+  packaging workflow produced `UcxStats-Setup-0.12.3.3-win-x64.exe`; installation,
+  application startup, Live Map with OSM tiles, QSO markers, short/long paths and
+  self-contained .NET deployment worked. Upgrade, uninstall and user-data
+  preservation still require acceptance tests listed in TODO.
+- [x] Detect the actual Inno compiler through a temporary ISPP `Ver` probe;
+  ignore zeroed executable version resources while enforcing the 6.7.3 pin.
+- [x] Linux publish resolves the central project version and produces
+  `artifacts/UcxStats-Packaging-<version>-win-x64.zip` plus SHA-256.
+- [x] ZIP contains root `package.ps1`, Inno script, schema-2 version/hash manifest,
+  README, payload policy, explicit installer file list and self-contained payload.
+- [x] Windows packaging uses only extracted files and Inno Setup; no checkout,
+  project source, .NET SDK or NuGet cache is needed. Output stays under `output/`.
+- [x] Preserve per-user installation, shortcuts, WebView2 prerequisite checks,
+  stable AppId, upgrade behavior and data-preserving uninstall.
+- [x] Preserve payload allowlist/privacy checks; validate payload and packaging
+  resource hashes before compiling; normalize ZIP order/timestamps/permissions.
+- [x] Add regression coverage for isolated ZIP extraction, version/inventory,
+  standalone script validation, Inno arguments, missing/changed/private payloads
+  and stable installer identity. Additional Windows acceptance checks remain in TODO.
+- [x] Document `Linux: publish-win-x64.sh` and
+  `Windows: extract ZIP → package.ps1 → Setup EXE`, including process-only
+  PowerShell execution-policy handling.
+
 ## UCX reverse engineering
 
 - [x] Identified fixed record size: **364 bytes**.
