@@ -7,10 +7,22 @@ namespace UcxStats.Map;
 
 public static class MapPageBuilder
 {
+    private static readonly JsonSerializerOptions PathWidthJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    public static string BuildPathWidthsScript(MapPathWidths widths) =>
+        $"window.ucxSetPathWidths && window.ucxSetPathWidths({SerializePathWidths(widths)});";
+
+    private static string SerializePathWidths(MapPathWidths widths) =>
+        JsonSerializer.Serialize(widths.Normalize(), PathWidthJsonOptions);
+
     public static string Build(
         IReadOnlyList<MapQsoPoint> points,
         MapTileDefinition tileSettings,
-        MapDxccPageOptions dxcc)
+        MapDxccPageOptions dxcc,
+        MapPathWidths? pathWidths = null)
     {
         ArgumentNullException.ThrowIfNull(points);
         ArgumentNullException.ThrowIfNull(tileSettings);
@@ -25,6 +37,9 @@ public static class MapPageBuilder
         var dxccDiagnosticJson = JsonSerializer.Serialize(dxcc.Diagnostic);
         var geometryAvailableJson = dxcc.GeometryAvailable ? "true" : "false";
         var enabledByDefaultJson = dxcc.EnabledByDefault ? "true" : "false";
+        var pathWidthsJson = SerializePathWidths(pathWidths ?? MapPathWidths.Default);
+        var minimumWidthJson = JsonSerializer.Serialize(MapPathWidths.Minimum);
+        var maximumWidthJson = JsonSerializer.Serialize(MapPathWidths.Maximum);
 
         return $$$"""
 <!doctype html><html><head><meta charset="utf-8">
@@ -63,6 +78,16 @@ baseTiles.on('tileerror',e=>{
 baseTiles.addTo(map);
 const markerRenderer=L.canvas({padding:.5,pane:'ucxMarkerPane'}),pathRenderer=L.canvas({padding:.5,pane:'ucxPathPane'}),stationLayer=L.layerGroup().addTo(map),nightLayer=L.layerGroup(),bounds=[];
 const bandLayers=new Map();
+let pathWidths={{{pathWidthsJson}}};
+function validPathWidth(value,fallback){return typeof value==='number'&&Number.isFinite(value)&&value>={{{minimumWidthJson}}}&&value<={{{maximumWidthJson}}}?value:fallback;}
+window.ucxSetPathWidths=function(widths){
+ const shortpathWidth=validPathWidth(widths?.shortpathWidth,pathWidths.shortpathWidth),longpathWidth=validPathWidth(widths?.longpathWidth,pathWidths.longpathWidth);
+ for(const b of bandLayers.values()){
+  if(shortpathWidth!==pathWidths.shortpathWidth)b.paths.eachLayer(layer=>layer.setStyle({weight:shortpathWidth}));
+  if(longpathWidth!==pathWidths.longpathWidth)b.longPaths.eachLayer(layer=>layer.setStyle({weight:longpathWidth}));
+ }
+ pathWidths={shortpathWidth,longpathWidth};
+};
 let showQsos=true,showPaths=true,showLong=false,showStations=true,showNight=false,suppressViewMessage=false;
 let showDxcc=dxccConfig.geometryAvailable&&dxccConfig.enabledByDefault,dxccLayer=null,dxccGeometryReady=false,dxccStatus=initialDxccStatus,bandControlHost=null,dxccControlCheckbox=null;
 const dxccFeatureLayers=new Map();
@@ -149,8 +174,8 @@ function addQso(q,includeBounds=true){
  addWrappedCircleMarker(b.points,q.lat,q.lon,{renderer:markerRenderer,radius:3,weight:1,color:b.color,fillColor:b.color,fillOpacity:.65},qPopup);if(includeBounds)bounds.push([q.lat,q.lon]);
  const key=`${q.station}|${q.slat}|${q.slon}`;
  if(!stations.has(key)){stations.set(key,{name:q.station,lat:q.slat,lon:q.slon});addWrappedCircleMarker(stationLayer,q.slat,q.slon,{renderer:markerRenderer,radius:7,weight:2,fillOpacity:.9},`<b>${esc(q.station)}</b><br>Stations-QTH`);if(includeBounds)bounds.push([q.slat,q.slon])}
- for(const segment of gc(q.slat,q.slon,q.lat,q.lon))L.polyline(segment,{renderer:pathRenderer,color:b.color,weight:1.3,opacity:.28,interactive:false}).addTo(b.paths);
- const lp=longGreatCircle(q.slat,q.slon,q.lat,q.lon);for(const shift of [-720,-360,0,360,720])L.polyline(lp.map(x=>[x[0],x[1]+shift]),{renderer:pathRenderer,color:b.color,weight:1.0,opacity:.15,dashArray:'5 5',interactive:false}).addTo(b.longPaths);
+ for(const segment of gc(q.slat,q.slon,q.lat,q.lon))L.polyline(segment,{renderer:pathRenderer,color:b.color,weight:pathWidths.shortpathWidth,opacity:.28,interactive:false}).addTo(b.paths);
+ const lp=longGreatCircle(q.slat,q.slon,q.lat,q.lon);for(const shift of [-720,-360,0,360,720])L.polyline(lp.map(x=>[x[0],x[1]+shift]),{renderer:pathRenderer,color:b.color,weight:pathWidths.longpathWidth,opacity:.15,dashArray:'5 5',interactive:false}).addTo(b.longPaths);
  refreshBand(q.bandCode);
 }
 for(const q of qsos)addQso(q,true);

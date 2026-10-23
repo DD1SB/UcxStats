@@ -7,12 +7,14 @@ using Microsoft.Win32;
 using UcxStats.Core.Ucx;
 using UcxStats.Data.Database;
 using UcxStats.Geo.Maidenhead;
+using UcxStats.Map;
 
 namespace UcxStats.Wpf;
 
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private MapWindow? _singleMapWindow;
+    private readonly MapSettingsService _mapSettings = App.MapSettings;
 
     private readonly IQsoRepository _repository = new SqliteQsoRepository();
     private readonly UcxRecordValidator _validator = new();
@@ -317,15 +319,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LiveMap_Click(object sender, RoutedEventArgs e)
     {
-        var window = new LiveMapWindow(_repository, this);
+        var window = new LiveMapWindow(_repository, this, _mapSettings);
         window.Show();
     }
 
     private void DxccSettings_Click(object sender, RoutedEventArgs e)
     {
-        var window = new DxccMapSettingsWindow { Owner = this };
+        var window = new DxccMapSettingsWindow(_mapSettings) { Owner = this };
         if (window.ShowDialog() == true)
-            StatusText = "DXCC-Kartenkonfiguration gespeichert; sie gilt für neu geladene Karten.";
+            StatusText = "Kartenoptionen gespeichert. Linienbreiten gelten sofort; DXCC-Konfiguration gilt für neu geladene Karten.";
     }
 
     private async void Map_Click(object sender, RoutedEventArgs e)
@@ -352,7 +354,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
             else
             {
-                var window = new MapWindow(_repository, selection.Scope, points, title) { Owner = this };
+                var window = new MapWindow(_repository, selection.Scope, points, title, _mapSettings) { Owner = this };
                 if (SingleMapWindowCheck.IsChecked == true)
                 {
                     _singleMapWindow = window;

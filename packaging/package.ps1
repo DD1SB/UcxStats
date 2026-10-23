@@ -200,7 +200,7 @@ if ($actual.Count -ne $expected.Count -or @($actual.Keys | Where-Object { !$expe
 }
 foreach ($asset in Get-Properties $policy.assetHashes) {
     if ((Get-FileHash -LiteralPath $actual[$asset.Name].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -cne $asset.Value) {
-        throw "Vendored map asset hash mismatch: $($asset.Name)"
+        throw "Bundled asset hash mismatch: $($asset.Name)"
     }
 }
 foreach ($name in $policy.x64Files) { Assert-X64Pe $actual[$name].FullName }

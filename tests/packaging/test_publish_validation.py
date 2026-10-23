@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from zipfile import ZipFile
@@ -18,7 +19,11 @@ from zipfile import ZipFile
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("publish_validator", REPO / "tools/validate-windows-publish.py")
 validator = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(validator)
+sys.path.insert(0, str(REPO / "tools"))
+try:
+    spec.loader.exec_module(validator)
+finally:
+    sys.path.pop(0)
 
 
 class PublishValidationTests(unittest.TestCase):
@@ -38,9 +43,46 @@ class PublishValidationTests(unittest.TestCase):
         manifest = validator.validate_bundle(self.bundle)
         self.assertGreater(len(manifest["files"]), 200)
 
+    def test_license_notices_are_preserved_in_the_payload(self):
+        sources = {"LICENSE": REPO / "LICENSE",
+                   "THIRD-PARTY-NOTICES.txt": REPO / "THIRD-PARTY-NOTICES.txt",
+                   "Assets/Leaflet/LICENSE": REPO / "src/UcxStats.Wpf/Assets/Leaflet/LICENSE"}
+        sources.update({"ThirdPartyNotices/" + path.relative_to(REPO / "third-party").as_posix(): path
+                        for path in (REPO / "third-party").rglob("*") if path.is_file()})
+        for name, source in sources.items():
+            with self.subTest(name=name):
+                path = self.bundle / "payload" / name
+                self.assertEqual(path.read_bytes(), source.read_bytes())
+                original = path.read_bytes()
+                try:
+                    path.write_bytes(original + b"changed notice")
+                    with self.assertRaisesRegex(ValueError, "asset hash mismatch|hashes or file inventory"):
+                        validator.validate_bundle(self.bundle)
+                finally:
+                    path.write_bytes(original)
+
+    def test_sdk_patch_metadata_is_preserved_and_incompatible_versions_rejected(self):
+        path = self.bundle / "manifest.json"
+        original = path.read_bytes()
+        try:
+            for version in ("10.0.112", "10.0.113", "10.0.199"):
+                with self.subTest(version=version):
+                    manifest = json.loads(original)
+                    manifest["sdkVersion"] = version
+                    path.write_text(json.dumps(manifest))
+                    self.assertEqual(validator.validate_bundle(self.bundle)["sdkVersion"], version)
+            for version in ("10.0.111", "10.0.200", "10.1.113", "11.0.113", "10.0.113-preview.1"):
+                with self.subTest(version=version):
+                    manifest["sdkVersion"] = version
+                    path.write_text(json.dumps(manifest))
+                    with self.assertRaisesRegex(ValueError, "incompatible"):
+                        validator.validate_bundle(self.bundle)
+        finally:
+            path.write_bytes(original)
+
     def test_private_data_is_rejected_even_when_added_to_manifest(self):
         names = ["private.UCX", "DCL.adi", "DCL.adif", "ucxstats.db", "cache.sqlite3",
-                 "runtime.log", "audit.csv", "map-tiles.json", "map-dxcc.json", "dxcc.geojson", ".env", "secret.pfx"]
+                 "runtime.log", "audit.csv", "map-tiles.json", "map-settings.json", "map-dxcc.json", "dxcc.geojson", ".env", "secret.pfx"]
         manifest_path = self.bundle / "manifest.json"
         original = manifest_path.read_bytes()
         for name in names:

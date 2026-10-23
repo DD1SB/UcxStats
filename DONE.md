@@ -1,5 +1,94 @@
 # Done
 
+## SDK compatibility and MIT license (2026-10-23)
+
+- [x] Keep the central application/file/installer version at `0.12.3.4` for the
+  map-settings update; preserve historical release records.
+- [x] Replace exact SDK patch matching with stable `latestPatch` roll-forward
+  from 10.0.112 within the 10.0.1xx feature band. The installed 10.0.113 resolves;
+  older patches, other bands/major/minor versions and prereleases are rejected.
+- [x] Record the resolved SDK in new manifests and validate stored SDK metadata
+  independently of the validator machine's installed SDK.
+- [x] Add seven focused SDK regressions, including publish-script acceptance and
+  rejection before restore/output creation; all seven pass.
+- [x] Inspect project history and existing notices: no project-level license or
+  conflicting project copyright notice found; the existing Leaflet BSD license
+  and all nine reviewed asset hashes remain unchanged.
+- [x] Add the complete standard MIT `LICENSE`, copyright (c) 2026
+  Stefan Biermann / DD1SB, using the copyright-holder name confirmed by the user.
+  Set the project SPDX license expression to `MIT` and link the license from README.
+- [x] Preserve exact supplied .NET/WPF, Microsoft.Data.Sqlite, SQLitePCLRaw and
+  WebView2 licenses/notices in `third-party/`; include them in the
+  Windows payload with explicit required files and asset hashes. Keep external
+  DXCC data excluded and document that application licensing grants no dataset
+  redistribution rights. Document the application/third-party license distinction
+  in README, the installer guide and the standalone packaging instructions.
+- [x] Preserve hash-pinned asset/notice bytes across Git checkouts with scoped
+  attributes; retain original upstream whitespace without changing source checks.
+- [x] SDK 10.0.113 final verification: `dotnet restore UcxStats.sln`,
+  `dotnet build UcxStats.sln` and `dotnet test UcxStats.sln` pass; all 249 tests
+  pass, including migration and generated JavaScript. The parser smoke executable
+  also passes. Final build has zero warnings/errors. No NU1900 warnings were
+  emitted in these checks; no fresh successful advisory scan is claimed.
+- [x] Rebuild and validate a 435-file self-contained .NET 10.0.12 win-x64 payload at
+  `artifacts/packaging/win-x64/0.12.3.4-map-settings-mit` and standalone ZIP
+  `artifacts/UcxStats-Packaging-0.12.3.4-map-settings-mit-win-x64.zip` (+ SHA-256).
+  The manifest records the actual SDK 10.0.113 and application version 0.12.3.4.
+  Packaging regressions report OK (31 tests, 9 PowerShell-related skips), covering
+  license/notice preservation and tampering, SDK metadata, privacy exclusions and
+  deterministic ZIP/checksum rebuilding. No Windows installer compilation,
+  installation or WPF/WebView2 runtime verification was performed for this build.
+
+## Separate general map settings from DXCC configuration
+
+- [x] Add `MapSettings`, `MapSettingsStore` and one shared `MapSettingsService`
+  for `%LOCALAPPDATA%\UcxStats\map-settings.json`; retain original defaults/range.
+- [x] Keep DXCC-only fields in `map-dxcc.json`; preserve known/unknown fields
+  during migration and later saves, and stop serializing widths into DXCC options.
+- [x] Resolve each width from valid new values, valid legacy values, then defaults;
+  commit general settings before cleaning legacy fields and retry partial migration.
+- [x] Use flushed same-directory temporary files and atomic replacement; skip
+  unchanged saves/startups, preserve malformed files and ignore orphaned temp files.
+- [x] Share general settings across MainWindow, normal/SQL maps, Live Map and
+  the existing **Kartenoptionen…** dialog; retain the JavaScript/runtime contract.
+- [x] Add migration/failure/preservation/idempotence regressions and update the
+  existing persistence tests without removing runtime or Live Map coverage.
+- [x] Document responsibilities, precedence, atomic writes and recovery limits.
+  Windows migration/runtime acceptance remains in TODO. Previous Windows packaging
+  artifacts below predate this refactor and have not been regenerated.
+- [x] Refactor verification with SDK 10.0.112: `dotnet restore UcxStats.sln`,
+  `dotnet build UcxStats.sln` and `dotnet test UcxStats.sln` passed; all 249 tests
+  passed, including 41 new migration cases and the retained runtime/Live Map cases.
+  The packaging privacy regression also passed with `map-settings.json` covered.
+  NuGet security-feed access reported NU1900 warnings; there were no build errors.
+
+## Configurable map path widths
+
+- [x] Preserve the discovered Shortpath 1.3 px and Longpath 1.0 px defaults.
+- [x] Add independently validated fractional `ShortpathWidth`/`LongpathWidth`
+  values; now stored in `map-settings.json` with migration from the original
+  `map-dxcc.json` implementation, as described above.
+- [x] Extend **Kartenoptionen…** with 0.5–8.0 px choices in 0.5 px steps, the exact
+  original Shortpath default and a width-only reset; expose it on open maps too.
+- [x] Restyle resident Leaflet paths in every open map with `setStyle({weight:…})`;
+  preserve view, bands, layer visibility, fullscreen, DXCC and Live Map state.
+- [x] Apply current widths to initial, appended and replaced Live Map paths,
+  including new bands and all wrapped Longpath copies.
+- [x] Add configuration, broadcast and generated-JavaScript regression tests
+  for compatibility, fractions, invalid values, independence, runtime updates,
+  Live additions/replacements/reset and untouched unrelated map layers.
+- [x] Document persistence, the runtime mechanism and a Windows acceptance
+  procedure. Windows runtime/visual verification remains in TODO.
+- [x] Linux verification with pinned SDK 10.0.112: solution restore/build passed,
+  all 208 tests passed (30 new width cases), and the existing smoke test passed.
+  Restore/build reported NU1900 warnings because the NuGet vulnerability feed
+  was unavailable; compilation had no errors.
+- [x] Established Windows pipeline produced and validated a 425-file,
+  self-contained .NET 10.0.12 win-x64 payload and standalone ZIP at
+  `artifacts/UcxStats-Packaging-0.12.3.3-path-widths-win-x64.zip` (+ SHA-256).
+  Packaging regression suite reported OK (22 tests, 9 PowerShell-related skips).
+  No Windows application, WebView2 or installer runtime test was performed.
+
 ## Standalone Windows installer packaging
 
 - [x] User-confirmed clean-Windows smoke test (2026-10-08): the standalone

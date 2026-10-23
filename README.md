@@ -24,7 +24,8 @@ SQLite is stored by default at:
 ## Requirements
 
 - Windows x64
-- For source builds: the .NET 10 SDK pinned in `global.json`
+- For source builds: .NET SDK 10.0.112 or a later stable 10.0.1xx patch, selected
+  through `global.json` with `latestPatch` roll-forward (10.0.113 is supported)
 - Microsoft Edge WebView2 Evergreen Runtime for maps
 - VS Code + C# Dev Kit, or Visual Studio
 
@@ -54,13 +55,27 @@ After reviewing the script, this execution-policy option applies to that process
 only; no permanent machine-wide change or elevation is required. Organizational
 Group Policy still applies. See the installer guide and the ZIP's `README.txt`.
 
+## License
+
+UcxStats is licensed under the [MIT License](LICENSE), also identified as `MIT`
+in the project metadata. Dependencies retain their own licenses; see
+[third-party notices](THIRD-PARTY-NOTICES.txt). Application and dependency license
+files are included in the Windows payload and installer. The application's MIT
+license grants no redistribution rights for AmazingProducer's external
+`dxcc.geojson`, which is excluded from the repository and installer.
+
 ## Build and run
 
 ```powershell
 dotnet restore UcxStats.sln
 dotnet build UcxStats.sln
+dotnet test UcxStats.sln
 dotnet run --project src/UcxStats.Wpf
 ```
+
+The generated map JavaScript regression tests also require Node.js 18+ on PATH.
+They execute with Leaflet/DOM test doubles; Windows WPF/WebView2 acceptance checks
+are documented in [map documentation](docs/MAP_DXCC.md).
 
 In VS Code, `F5` uses `.vscode/launch.json`; the default build task is `Ctrl+Shift+B`.
 
@@ -266,11 +281,35 @@ The optional Leaflet DXCC overlay is implemented on top of the numeric DXCC foun
 - The known AmazingProducer file with SHA-256 `e9b086eff7fb690e9990e10855f3fb494f9d1115e4af1928f6a8b545efef4568` has an explicit v1 normalization profile for three incorrect IDs, Kosovo, duplicate Conway Reef, and retained non-DXCC Somaliland geometry. Unknown hashes are validated without those source-specific corrections.
 - Current/deleted/unknown classification is exposed through `IDxccEntityCatalog`. The offline catalog is generated from the Released ADIF 3.1.7 machine-readable DXCC Entity Code TSV dated 2026-03-22: 340 Current entities, 62 Deleted entities, plus code `0` as an explicit non-DXCC sentinel. Unknown numeric IDs remain `Unknown`. No ADIF or ARRL site is contacted at runtime.
 
-Use **DXCC-Karte…** in the main window to select and validate an absolute path to `dxcc.geojson`. UcxStats stores the path and optional default visibility in:
+Use **Kartenoptionen…** in the main window or an open map. Configuration is split
+under `%LOCALAPPDATA%\UcxStats`:
 
-```text
-%LOCALAPPDATA%\UcxStats\map-dxcc.json
-```
+| File | Responsibility |
+| --- | --- |
+| `map-settings.json` | General presentation: `ShortpathWidth` and `LongpathWidth` |
+| `map-dxcc.json` | External `GeoJsonPath`, DXCC `EnabledByDefault` and other DXCC options |
+
+**Shortpath (px)** and **Longpath (px)** independently set Leaflet line weights
+from 0.5 to 8.0 px in 0.5 px steps. The original defaults remain **1.3 px** and
+**1.0 px**; 1.3 is an additional Shortpath choice. **Linienbreiten zurücksetzen**
+selects these defaults; **Speichern** saves and applies them to every open map.
+The optional JSON fields `ShortpathWidth` and `LongpathWidth` also accept other
+fractions in that range, retained by the dialog.
+
+At startup, each valid value in `map-settings.json` takes precedence. Missing or
+invalid values use valid legacy widths from `map-dxcc.json`, then the original
+defaults. Migration commits the complete general settings atomically before
+removing the two legacy fields from DXCC configuration. All other DXCC fields,
+including unknown options, survive. Completed migration and unchanged settings
+are not rewritten; a fresh installation creates no settings files until needed.
+Malformed JSON is reported and left untouched. See [migration and recovery](docs/MAP_DXCC.md#configuration-migration-and-recovery)
+for write failures and recovery.
+
+Open maps restyle their existing path layers through `setStyle({weight:…})`.
+Saving widths preserves pan/zoom, bands, layer visibility, fullscreen, DXCC and
+Live Map monitoring. Live additions and replacements use the current widths.
+DXCC borders, markers and day/night shading keep their existing styles. DXCC
+path/default-visibility changes continue to take effect on newly loaded maps.
 
 Each map validates and normalizes that source, stages only the normalized copy in its private temporary `MapWeb` folder, and loads it once through `https://ucxstats.local`. The overlay defaults to off. Its resident Leaflet layer is restyled when the existing band checkboxes change; geometry is not fetched again and never participates in `fitBounds`. Polygon popups show numeric ID, source prefix, current selected-band status, QSO count, and worked/confirmation bands. Complete compact aggregate snapshots are also refreshed by Live Map, including changes caused by QSOs without locators.
 

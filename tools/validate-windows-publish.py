@@ -12,6 +12,8 @@ import sys
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
+from dotnet_sdk import resolve_sdk_version, validate_sdk_version
+
 REPO = Path(__file__).resolve().parents[1]
 BUNDLE_RESOURCES = {
     "package.ps1": "packaging/package.ps1",
@@ -115,7 +117,7 @@ def validate_payload(payload):
                          f"Unexpected (including private data): {sorted(files.keys() - expected)}")
     for name, sha in policy["assetHashes"].items():
         if digest(files[name]) != sha:
-            raise ValueError(f"Vendored map asset hash mismatch: {name}")
+            raise ValueError(f"Bundled asset hash mismatch: {name}")
     for name in policy["x64Files"]:
         with files[name].open("rb") as stream:
             if stream.read(2) != b"MZ":
@@ -132,17 +134,21 @@ def validate_payload(payload):
         "version": version,
         "runtimeIdentifier": "win-x64",
         "selfContained": True,
-        "sdkVersion": json.loads((REPO / "global.json").read_text())["sdk"]["version"],
         "runtimeVersion": runtime_version,
         "innoSetupVersion": json.loads((REPO / "packaging/toolchain.json").read_text())["innoSetupVersion"],
         "files": entries,
     }
 
 
-def validate_bundle(bundle, create=False):
+def validate_bundle(bundle, create=False, sdk_version=None):
     if bundle.is_symlink():
         raise ValueError("Bundle must not be a symbolic link")
     manifest = validate_payload(bundle / "payload")
+    if create:
+        sdk_version = resolve_sdk_version() if sdk_version is None else sdk_version
+    else:
+        sdk_version = json.loads((bundle / "manifest.json").read_text())["sdkVersion"]
+    manifest["sdkVersion"] = validate_sdk_version(sdk_version)
     text = file_list(manifest["files"])
     readme = (REPO / "packaging/README.txt").read_text(encoding="utf-8")
     readme = readme.replace("@VERSION@", manifest["version"]).replace("@INNO_VERSION@", manifest["innoSetupVersion"])
@@ -193,6 +199,7 @@ def main():
     parser.add_argument("bundle", nargs="?", type=Path)
     parser.add_argument("--version", action="store_true")
     parser.add_argument("--create", action="store_true")
+    parser.add_argument("--sdk-version", help="SDK resolved by the publisher (with --create only)")
     parser.add_argument("--archive", type=Path)
     args = parser.parse_args()
     if args.version:
@@ -200,7 +207,9 @@ def main():
         return
     if args.bundle is None:
         parser.error("bundle is required")
-    manifest = validate_bundle(args.bundle, args.create)
+    if args.sdk_version is not None and not args.create:
+        parser.error("--sdk-version requires --create")
+    manifest = validate_bundle(args.bundle, args.create, args.sdk_version)
     if args.archive:
         print(f"Archive SHA-256: {archive_bundle(args.bundle, args.archive)}")
     print(f"Validated {len(manifest['files'])} files; UcxStats {manifest['version']}; "

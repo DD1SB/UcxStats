@@ -1,0 +1,76 @@
+UcxStats third-party components and attribution
+==============================================
+
+The root LICENSE applies to the UcxStats application. Third-party components
+retain their own copyrights, licenses and notices; they are not relicensed by
+UcxStats. The following files are shipped alongside the application in both
+the self-contained Windows payload and installer. The repository stores the
+ThirdPartyNotices files under third-party/.
+
+Leaflet 1.9.4
+  Copyright (c) 2010-2023, Volodymyr Agafonkin
+  Copyright (c) 2010-2011, CloudMade
+  BSD-2-Clause; complete notice: Assets/Leaflet/LICENSE
+  JavaScript, CSS, source map and image assets retain their upstream notices.
+  https://github.com/Leaflet/Leaflet/tree/v1.9.4
+
+.NET runtime 10.0.12
+  Copyright (c) .NET Foundation and Contributors
+  MIT, with additional third-party notices supplied by Microsoft:
+  ThirdPartyNotices/dotnet/LICENSE.txt
+  ThirdPartyNotices/dotnet/THIRD-PARTY-NOTICES.txt
+  Copied verbatim from Microsoft.NETCore.App.Runtime.win-x64 10.0.12.
+  https://github.com/dotnet/runtime/tree/v10.0.12
+
+Windows Desktop / WPF runtime 10.0.12
+  Copyright (c) .NET Foundation and Contributors
+  MIT, with additional third-party notices:
+  ThirdPartyNotices/wpf/LICENSE.txt
+  ThirdPartyNotices/wpf/THIRD-PARTY-NOTICES.txt
+  License copied verbatim from Microsoft.WindowsDesktop.App.Runtime.win-x64
+  10.0.12; notices from the official dotnet/wpf v10.0.12 tag.
+  https://github.com/dotnet/wpf/tree/v10.0.12
+
+Microsoft.Data.Sqlite and Microsoft.Data.Sqlite.Core 10.0.11
+  Copyright (c) .NET Foundation and Contributors
+  Package metadata: Copyright Microsoft Corporation. All rights reserved.
+  MIT; complete upstream license: ThirdPartyNotices/microsoft-data-sqlite/LICENSE.txt
+  https://github.com/dotnet/efcore/blob/v10.0.11/LICENSE.txt
+
+SQLitePCLRaw 2.1.12
+  bundle_e_sqlite3, core, provider.e_sqlite3 and lib.e_sqlite3 packages
+  Copyright 2014-2024 SourceGear, LLC (as recorded in the NuGet packages)
+  Apache-2.0; complete license: ThirdPartyNotices/sqlitepclraw/LICENSE.txt
+  https://github.com/ericsink/SQLitePCL.raw/tree/v2.1.12
+  The bundled native SQLite engine is public domain; this does not change the
+  Apache-2.0 terms of the SQLitePCLRaw wrappers and packaging.
+  https://sqlite.org/copyright.html
+
+Microsoft.Web.WebView2 SDK 1.0.4078.44
+  Copyright (C) Microsoft Corporation. All rights reserved.
+  The SDK's own redistribution terms and third-party notices are preserved in:
+  ThirdPartyNotices/webview2/LICENSE.txt
+  ThirdPartyNotices/webview2/NOTICE.txt
+  Both copied verbatim from the NuGet package. The separately installed Edge
+  WebView2 Evergreen Runtime is not bundled and has its own Microsoft terms.
+  https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4078.44
+
+Build and test dependencies
+  Microsoft.NET.Test.Sdk, Microsoft.TestPlatform.*, Microsoft.CodeCoverage,
+  xUnit, xunit.runner.visualstudio, xunit.analyzers, xunit.abstractions,
+  Newtonsoft.Json and their transitive dependencies are used only for builds
+  and tests. They are not part of the Windows application payload. Their
+  original license metadata and notices remain in the restored NuGet packages;
+  consult the checked-in package lock files for exact versions.
+
+External data and services
+  AmazingProducer's dxcc.geojson is an external, user-supplied dataset. It is
+  excluded from the repository, transfer ZIP and Windows installer. UcxStats'
+  MIT license grants no rights to use or redistribute that dataset; obtain
+  permission under the dataset owner's terms separately.
+  Generated DXCC reference tables retain their ADIF/UcxLog source/version/hash
+  attribution in source and documentation. UcxStats does not relicense upstream
+  reference resources or redistribute the original UcxLog COUNTRY.DAT resource.
+  Map tiles and services remain subject to their providers' terms. The map
+  retains its configured tile attribution; a UcxStats license does not grant
+  rights to third-party tiles or data.

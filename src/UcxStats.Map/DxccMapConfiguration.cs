@@ -12,7 +12,6 @@ public sealed record DxccMapConfigurationLoadResult(
 
 public sealed class DxccMapConfigurationStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _path;
 
     public DxccMapConfigurationStore(string? path = null)
@@ -61,11 +60,11 @@ public sealed class DxccMapConfigurationStore
         if (geoJsonPath is not null && !System.IO.Path.IsPathFullyQualified(geoJsonPath))
             throw new ArgumentException("The DXCC GeoJSON path must be absolute.", nameof(configuration));
 
-        var directory = System.IO.Path.GetDirectoryName(_path)
-            ?? throw new InvalidOperationException("The DXCC configuration path has no parent directory.");
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(
-            _path,
-            JsonSerializer.Serialize(configuration with { GeoJsonPath = geoJsonPath }, JsonOptions));
+        var document = AtomicJsonFile.ReadObject(_path) ?? new System.Text.Json.Nodes.JsonObject();
+        document[nameof(DxccMapConfiguration.GeoJsonPath)] = geoJsonPath;
+        document[nameof(DxccMapConfiguration.EnabledByDefault)] = configuration.EnabledByDefault;
+        document.Remove(nameof(MapSettings.ShortpathWidth));
+        document.Remove(nameof(MapSettings.LongpathWidth));
+        AtomicJsonFile.WriteIfChanged(_path, document);
     }
 }

@@ -35,17 +35,45 @@ The payload includes:
 - Leaflet **1.9.4** JavaScript, CSS, source map, all five image assets and its BSD
   license under `Assets/Leaflet`. These are public application assets. HTML and
   QSO/DXCC payloads are generated at runtime rather than shipped as station data.
+- UcxStats' `LICENSE`, `THIRD-PARTY-NOTICES.txt` and dependency licenses/notices
+  under `ThirdPartyNotices/`, explicitly included and hash-checked by the payload
+  policy. Leaflet keeps its own adjacent license.
 
 Maps load Leaflet from the local `https://ucxstats.local` origin. Only background
 tiles require the configured network provider; offline tiles depend on the
 provider/cache. There is no Leaflet CDN dependency. DXCC geometry is optional,
 external and never included in a publish or installer.
 
+## Application and third-party licenses
+
+The UcxStats application is [MIT licensed](../LICENSE), with SPDX identifier `MIT`
+in the project metadata. This license applies to UcxStats' own code. Leaflet,
+NuGet dependencies and the self-contained .NET/Windows Desktop runtimes retain
+their original licenses and copyright notices; the WebView2 Evergreen Runtime
+remains a separately installed prerequisite with its own terms.
+
+[THIRD-PARTY-NOTICES.txt](../THIRD-PARTY-NOTICES.txt) inventories the distributed
+components and identifies the complete license/notice files shipped with the
+payload and installed into `{app}`. These include Leaflet's BSD license,
+SQLitePCLRaw's Apache-2.0 license, .NET/WPF MIT licenses and supplied third-party
+notices, Microsoft.Data.Sqlite's MIT license, and the WebView2 SDK's own license
+and notice. Test-only NuGet packages are not installed. Retain all these files
+when redistributing the application; dependency terms are not replaced by the
+application's MIT license.
+
+AmazingProducer's external DXCC GeoJSON is outside the application license.
+UcxStats grants no rights to use or redistribute it. Users must obtain the data
+and any necessary permissions separately. `dxcc.geojson` remains ignored by Git
+and rejected by the publish allowlist; it is never included in the transfer ZIP
+or installer. Tile providers and upstream reference data retain their own terms
+and attribution as described in the notices.
+
 ## Versioning and reproducibility
 
 `Directory.Build.props` contains the explicit four-component `Version`, initially
 **0.12.3.3**, taken from the pre-existing UI/README baseline. This is not a new
-release claim. Assembly/file versions, the window title, map User-Agent, manifest,
+release claim. The map-settings installer uses **0.12.3.4**. Assembly/file versions,
+the window title, map User-Agent, manifest,
 installer metadata and installer filename derive from it. Linux resolves this
 version into `manifest.json` (schema 2); the standalone Windows script reads it
 there and verifies the published dependency version, without consulting project
@@ -56,13 +84,22 @@ the project-reference lock entries and review them. Scripts refuse to overwrite
 an existing staging bundle, packaging ZIP/checksum or installer. Use new paths
 for a rebuild; the optional second publish argument selects a new archive path.
 
-`global.json` pins SDK **10.0.112** without roll-forward.
+`global.json` uses **10.0.112** as the minimum SDK, with `rollForward: latestPatch`
+and `allowPrerelease: false`. Stable patches **10.0.112–10.0.199**, including the
+server's **10.0.113**, are compatible. Older patches, different major/minor or
+feature bands (such as 10.0.200), and prereleases are rejected. The publish script
+resolves `dotnet --version` from the checkout and checks the same patch policy;
+the manifest records the actual resolved SDK. Bundle validation checks that stored
+SDK without requiring a local SDK installation. See Microsoft's
+[SDK roll-forward definitions](https://learn.microsoft.com/en-us/dotnet/core/tools/global-json#rollforward).
 `packaging/windows-publish.props` pins the Windows runtime and sets deterministic
 Release compilation, x64, self-contained publishing, no symbols, and a source
 path map. `packages.lock.json` locks normal builds; `packages.win-x64.lock.json`
 locks the Windows publish graph separately. Publish restore uses `--locked-mode`.
 `packaging/toolchain.json` pins Inno Setup **6.7.3**. Update pinned toolchain/runtime
 versions deliberately, including security updates, and revalidate before release.
+Compatible SDK patches can change compiler outputs, so compare reproducibility
+using the same resolved SDK recorded in the manifest.
 
 The ZIP has sorted entries, fixed timestamps and permissions. The generated Inno
 entries use `ignoreversion touch` with fixed UTC timestamps. There are no build
@@ -75,7 +112,7 @@ publisher authentication.
 
 ## Build on Pop!_OS
 
-Install the pinned .NET SDK and Python **3.11+** (3.12 is used on the build server).
+Install a compatible .NET SDK patch and Python **3.11+** (3.12 is used on the build server).
 Bash, GNU `realpath`/`mv`, and access to NuGet on the first restore are required.
 The project already sets `EnableWindowsTargeting=true`; Windows targeting/runtime
 packs are acquired through restore. Inno Setup and Wine are not required here.
@@ -89,7 +126,7 @@ dotnet test UcxStats.sln -c Release --no-build --no-restore --artifacts-path art
 dotnet artifacts/build/linux/bin/UcxStats.SmokeTest/release/UcxStats.SmokeTest.dll
 
 ./tools/publish-win-x64.sh
-python3 tools/validate-windows-publish.py artifacts/packaging/win-x64/0.12.3.3
+python3 tools/validate-windows-publish.py artifacts/packaging/win-x64/0.12.3.4
 python3 -m unittest discover -s tests/packaging -v
 ```
 
@@ -333,14 +370,19 @@ installed maps use the new shared user-data profile.
 | --- | --- | --- |
 | SQLite QSOs, profiles, source metadata, confirmations | `%LOCALAPPDATA%\UcxStats\ucxstats.db` (+ WAL/SHM while open) | Never bundled, overwritten or removed |
 | Tile provider/configuration, including any private URLs/tokens | `%LOCALAPPDATA%\UcxStats\map-tiles.json` | Preserved; the application creates defaults only if absent |
-| DXCC external path and default visibility | `%LOCALAPPDATA%\UcxStats\map-dxcc.json` | Preserved; absolute geometry path remains unchanged |
+| General map presentation: Shortpath/Longpath widths | `%LOCALAPPDATA%\UcxStats\map-settings.json` | Preserved; application migrates legacy widths per field; original defaults remain 1.3/1.0 px |
+| DXCC external path, overlay default visibility and other DXCC options | `%LOCALAPPDATA%\UcxStats\map-dxcc.json` | Preserved; application removes migrated width fields only and retains unknown DXCC options |
 | Browser profile/cache | `%LOCALAPPDATA%\UcxStats\WebView2` | Outside program files; preserved |
 | Generated map HTML/normalized geometry | `%LOCALAPPDATA%\UcxStats\MapWeb\<window-id>` | Runtime temporary data; map-window cleanup remains unchanged |
 | Original UCX logs, DCL exports, saved SQL/configuration and audit/log files | User-selected paths | Never gathered, bundled, moved or removed |
 | External `dxcc.geojson` | User-selected absolute path | Never bundled; only read/staged by the existing map workflow |
 
-No global file logger or separate general user-settings file was found in the
-current application. Any files users keep under the data directory remain outside
+The application owns map-settings migration, not Setup. It commits general widths
+atomically before removing legacy fields from DXCC configuration. Complete valid
+new values take precedence; missing/invalid fields use valid legacy values, then
+defaults. Completed migration does not rewrite files on subsequent startups.
+See [migration and recovery](MAP_DXCC.md#configuration-migration-and-recovery).
+No global file logger is configured. Any files users keep under the data directory remain outside
 the installer lifecycle, including future configuration/log files. Installation
 is per user; it does not move another Windows user's data.
 
@@ -382,6 +424,8 @@ licensed GeoJSON for validation; do not add them to the bundle.
   the local origin, tiles/attribution, markers, paths, band controls, synchronization
   and F11. Block CDN access and confirm the map UI still initializes; offline
   uncached network tiles may be unavailable. Verify the WebView2 profile location.
+  Follow the [Windows width acceptance procedure](MAP_DXCC.md#windows-width-acceptance-procedure)
+  for independent path widths, live in-place updates, reset and persistence.
 - [ ] **DXCC:** first test without geometry (main app/maps work, overlay unavailable).
   Select an external absolute GeoJSON path, enable the overlay, inspect polygons,
   status colors/band filtering and repeat after restart. Test missing/invalid

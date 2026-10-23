@@ -20,6 +20,7 @@ public partial class MapWindow : Window
     private readonly Guid _syncId = Guid.NewGuid();
     private readonly MapTileSettings _tileSettings = MapTileSettings.Load();
     private readonly DxccMapConfigurationStore _dxccConfigurationStore = new();
+    private readonly MapSettingsService _mapSettings;
     private readonly string _mapWebFolder;
     private IReadOnlyList<MapQsoPoint> _points;
     private QsoScope _scope;
@@ -39,7 +40,8 @@ public partial class MapWindow : Window
         IQsoRepository repository,
         QsoScope scope,
         IReadOnlyList<MapQsoPoint> points,
-        string title)
+        string title,
+        MapSettingsService? mapSettings = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(scope);
@@ -47,6 +49,7 @@ public partial class MapWindow : Window
         _repository = repository;
         _scope = scope;
         _points = points;
+        _mapSettings = mapSettings ?? App.MapSettings;
         _mapWebFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "UcxStats",
@@ -65,6 +68,7 @@ public partial class MapWindow : Window
         Loaded += MapWindow_Loaded;
         Closed += MapWindow_Closed;
         MapSyncService.ViewChanged += MapSyncService_ViewChanged;
+        _mapSettings.Changed += MapSettings_Changed;
     }
 
     private async void MapWindow_Loaded(object sender, RoutedEventArgs e)
@@ -280,8 +284,12 @@ public partial class MapWindow : Window
     private void MapWindow_Closed(object? sender, EventArgs e)
     {
         MapSyncService.ViewChanged -= MapSyncService_ViewChanged;
+        _mapSettings.Changed -= MapSettings_Changed;
         if (MapWebView.CoreWebView2 is not null)
+        {
             MapWebView.CoreWebView2.WebMessageReceived -= CoreWebView2_WebMessageReceived;
+            MapWebView.CoreWebView2.NavigationCompleted -= MapWebView_NavigationCompleted;
+        }
 
         try
         {
@@ -383,8 +391,41 @@ public partial class MapWindow : Window
         }
     }
 
+    private async void MapSettings_Changed(MapSettings settings)
+    {
+        await ApplyPathWidthsAsync();
+    }
+
+    private async void MapWebView_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        // A save during page initialization must also reach the newly ready page.
+        if (e.IsSuccess)
+            await ApplyPathWidthsAsync();
+    }
+
+    private async Task ApplyPathWidthsAsync()
+    {
+        if (MapWebView.CoreWebView2 is null)
+            return;
+
+        try
+        {
+            await MapWebView.ExecuteScriptAsync(MapPageBuilder.BuildPathWidthsScript(_mapSettings.Current.PathWidths));
+        }
+        catch
+        {
+            // Navigation completion retries the latest settings if the page was not ready.
+            // Closing maps need no further update.
+        }
+    }
+
+    private void MapSettings_Click(object sender, RoutedEventArgs e) =>
+        new DxccMapSettingsWindow(_mapSettings) { Owner = this }.ShowDialog();
+
     private void ConfigureWebView(CoreWebView2 core)
     {
+        core.NavigationCompleted -= MapWebView_NavigationCompleted;
+        core.NavigationCompleted += MapWebView_NavigationCompleted;
         core.SetVirtualHostNameToFolderMapping(
             MapVirtualHost,
             _mapWebFolder,
@@ -415,7 +456,7 @@ public partial class MapWindow : Window
             _tileSettings.UrlTemplate,
             _tileSettings.Attribution,
             _tileSettings.MaxZoom);
-        File.WriteAllText(htmlPath, MapPageBuilder.Build(points, tileDefinition, dxcc));
+        File.WriteAllText(htmlPath, MapPageBuilder.Build(points, tileDefinition, dxcc, _mapSettings.Current.PathWidths));
         var cacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         MapWebView.CoreWebView2?.Navigate($"https://{MapVirtualHost}/map.html?v={cacheBust}");
     }

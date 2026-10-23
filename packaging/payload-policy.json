@@ -24,7 +24,17 @@
     "PresentationCore.dll",
     "PresentationFramework.dll",
     "WindowsBase.dll",
-    "wpfgfx_cor3.dll"
+    "wpfgfx_cor3.dll",
+    "THIRD-PARTY-NOTICES.txt",
+    "ThirdPartyNotices/dotnet/LICENSE.txt",
+    "ThirdPartyNotices/dotnet/THIRD-PARTY-NOTICES.txt",
+    "ThirdPartyNotices/microsoft-data-sqlite/LICENSE.txt",
+    "ThirdPartyNotices/sqlitepclraw/LICENSE.txt",
+    "ThirdPartyNotices/webview2/LICENSE.txt",
+    "ThirdPartyNotices/webview2/NOTICE.txt",
+    "ThirdPartyNotices/wpf/LICENSE.txt",
+    "ThirdPartyNotices/wpf/THIRD-PARTY-NOTICES.txt",
+    "LICENSE"
   ],
   "x64Files": [
     "UcxStats.Wpf.exe",
@@ -83,6 +93,16 @@
     "Assets/Leaflet/images/marker-shadow.png": "264f5c640339f042dd729062cfc04c17f8ea0f29882b538e3848ed8f10edb4da",
     "Assets/Leaflet/leaflet.css": "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6",
     "Assets/Leaflet/leaflet.js": "85d455b4522415f6badc42a0e7d17c919d100347d6b8958bd0dc738fdecd6d50",
-    "Assets/Leaflet/leaflet.js.map": "600a10dc5cd110de0699510d322afcbe01c7ca90b4c5f48adc20314c70aac753"
+    "Assets/Leaflet/leaflet.js.map": "600a10dc5cd110de0699510d322afcbe01c7ca90b4c5f48adc20314c70aac753",
+    "THIRD-PARTY-NOTICES.txt": "8e36bc4aee59026a16eab603e7afc233b82f74d54e8799639ecfd2263c0f6b55",
+    "ThirdPartyNotices/dotnet/LICENSE.txt": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b",
+    "ThirdPartyNotices/dotnet/THIRD-PARTY-NOTICES.txt": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21",
+    "ThirdPartyNotices/microsoft-data-sqlite/LICENSE.txt": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+    "ThirdPartyNotices/sqlitepclraw/LICENSE.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "ThirdPartyNotices/webview2/LICENSE.txt": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55",
+    "ThirdPartyNotices/webview2/NOTICE.txt": "106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90",
+    "ThirdPartyNotices/wpf/LICENSE.txt": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab",
+    "ThirdPartyNotices/wpf/THIRD-PARTY-NOTICES.txt": "d23dba2fee20c6b59d8f7088ee9ed372459c952a319b7ca90f3eec370cc76eb9",
+    "LICENSE": "1715c89245c94d6517d0885d34c2bd6a482d3288aa68a023175bfa66a825db65"
   }
 }

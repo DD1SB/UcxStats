@@ -25,5 +25,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures\ucx-mapping-v2-baseline.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\map-path-widths.cjs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

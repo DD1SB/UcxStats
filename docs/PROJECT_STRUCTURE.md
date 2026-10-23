@@ -10,6 +10,7 @@ UcxStats/
 │   ├── DATABASE.md
 │   ├── PROJECT_STRUCTURE.md
 │   └── UCX_FORMAT.md
+├── packaging/             # standalone Windows installer inputs and payload policy
 ├── src/
 │   ├── UcxStats.Core/
 │   │   └── Ucx/
@@ -37,8 +38,13 @@ UcxStats/
 │   ├── UcxStats.Geo/
 │   │   └── Maidenhead/
 │   ├── UcxStats.Map/
+│   │   ├── AtomicJsonFile.cs
 │   │   ├── DxccMapConfiguration.cs
 │   │   ├── DxccMapPayload.cs
+│   │   ├── MapPathWidths.cs
+│   │   ├── MapSettings.cs
+│   │   ├── MapSettingsStore.cs
+│   │   ├── MapSettingsService.cs
 │   │   └── MapPageBuilder.cs
 │   └── UcxStats.Wpf/
 │       ├── DxccMapSettingsWindow.xaml
@@ -47,11 +53,19 @@ UcxStats/
 │       └── MainWindow.xaml.cs
 ├── tests/
 │   ├── UcxStats.Data.Tests/
-│   └── UcxStats.SmokeTest/
+│   ├── UcxStats.SmokeTest/
+│   └── packaging/
+├── third-party/           # preserved dependency license/notice texts
 ├── tools/
+│   ├── dotnet_sdk.py
 │   ├── generate-dxcc-catalog.sh
-│   └── generate-ucx-dxcc-mapping.sh
+│   ├── generate-ucx-dxcc-mapping.sh
+│   ├── publish-win-x64.sh
+│   └── validate-windows-publish.py
+├── Directory.Build.props
 ├── DONE.md
+├── LICENSE
+├── THIRD-PARTY-NOTICES.txt
 ├── TODO.md
 ├── README.md
 ├── global.json

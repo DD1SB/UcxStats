@@ -7,6 +7,7 @@
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <DockPanel Margin="8">
    <Button DockPanel.Dock="Right" Width="110" Margin="8,0,0,0" Click="Fullscreen_Click">Vollbild (F11)</Button>
+   <Button DockPanel.Dock="Right" Width="125" Margin="8,0,0,0" Click="MapSettings_Click">Kartenoptionen…</Button>
    <CheckBox x:Name="SyncMapsCheck" DockPanel.Dock="Right" Margin="8,0" VerticalAlignment="Center" IsChecked="True">Karten synchronisieren</CheckBox>
    <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontWeight="SemiBold"/>
   </DockPanel>

@@ -1,7 +1,23 @@
 # Todo
 
+## Map line-width Windows acceptance
+
+- [ ] Verify the [configuration migration procedure](docs/MAP_DXCC.md#configuration-migration-and-recovery)
+  on Windows: legacy-only, complete/partial general settings, unknown DXCC fields,
+  locked/read-only destinations, retry after interruption, unchanged files on
+  repeated startup and no writes on a fresh installation. Verify both files
+  survive upgrade/uninstall. Use the newly validated 0.12.3.4 payload for these checks.
+- [ ] Run the [Windows width acceptance procedure](docs/MAP_DXCC.md#windows-width-acceptance-procedure)
+  on normal and Live maps: independent fractional widths, 1.3/1.0 px reset,
+  persistence, save during loading, hidden bands, multiple windows, fullscreen,
+  retained view/layer/DXCC state and Live additions/replacements. Linux regression
+  tests use Leaflet/DOM doubles and do not execute WPF/WebView2.
+
 ## Windows installer release verification
 
+- [ ] Verify the 0.12.3.4 installed application/file/installer versions and the
+  presence of `LICENSE`, `THIRD-PARTY-NOTICES.txt`, `ThirdPartyNotices/` and
+  `Assets/Leaflet/LICENSE`; check that external GeoJSON and local settings are absent.
 - [ ] Verify remaining standalone packaging variants with Inno Setup 6.7.3 and both
   Windows PowerShell 5.1 and PowerShell 7, from an unrelated current directory
   and an extraction path containing spaces; no repository or .NET SDK present.

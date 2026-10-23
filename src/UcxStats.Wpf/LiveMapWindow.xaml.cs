@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using UcxStats.Data.Database;
+using UcxStats.Map;
 
 namespace UcxStats.Wpf;
 
@@ -11,6 +12,7 @@ public partial class LiveMapWindow : Window
     private readonly IQsoRepository _repository;
     private readonly UcxImportService _importService;
     private readonly Window _mainOwner;
+    private readonly MapSettingsService _mapSettings;
 
     private FileSystemWatcher? _watcher;
     private CancellationTokenSource? _debounceCancellation;
@@ -21,11 +23,12 @@ public partial class LiveMapWindow : Window
     private bool _refreshRunning;
     private bool _refreshPending;
 
-    public LiveMapWindow(IQsoRepository repository, Window owner)
+    public LiveMapWindow(IQsoRepository repository, Window owner, MapSettingsService? mapSettings = null)
     {
         _repository = repository;
         _importService = new UcxImportService(repository);
         _mainOwner = owner;
+        _mapSettings = mapSettings ?? App.MapSettings;
         InitializeComponent();
         Owner = owner;
         Loaded += LiveMapWindow_Loaded;
@@ -185,7 +188,7 @@ public partial class LiveMapWindow : Window
                 if (initial || _mapWindow is null || !_mapWindow.IsLoaded)
                 {
                     var title = $"LIVE · {_activeSource.FileName} · ab {_fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
-                    _mapWindow = new MapWindow(_repository, scope, points, title) { Owner = _mainOwner };
+                    _mapWindow = new MapWindow(_repository, scope, points, title, _mapSettings) { Owner = _mainOwner };
                     _mapWindow.Closed += (_, _) => _mapWindow = null;
                     _mapWindow.Show();
                 }

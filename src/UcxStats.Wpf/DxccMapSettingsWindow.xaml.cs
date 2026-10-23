@@ -9,17 +9,41 @@ namespace UcxStats.Wpf;
 public partial class DxccMapSettingsWindow : Window
 {
     private readonly DxccMapConfigurationStore _store = new();
+    private readonly MapSettingsService _mapSettings;
+    private readonly DxccMapConfiguration _initialDxccConfiguration;
 
-    public DxccMapSettingsWindow()
+    public DxccMapSettingsWindow(MapSettingsService? mapSettings = null)
     {
         InitializeComponent();
+        _mapSettings = mapSettings ?? App.MapSettings;
         var loaded = _store.Load();
+        _initialDxccConfiguration = loaded.Configuration;
         GeoJsonPathBox.Text = loaded.Configuration.GeoJsonPath ?? string.Empty;
         EnabledByDefaultCheck.IsChecked = loaded.Configuration.EnabledByDefault;
-        ValidationText.Text = loaded.Error ??
+        var widths = _mapSettings.Current.PathWidths;
+        ShortpathWidthBox.ItemsSource = WidthChoices(widths.ShortpathWidth, MapPathWidths.DefaultShortpathWidth);
+        LongpathWidthBox.ItemsSource = WidthChoices(widths.LongpathWidth, MapPathWidths.DefaultLongpathWidth);
+        ShortpathWidthBox.SelectedItem = widths.ShortpathWidth;
+        LongpathWidthBox.SelectedItem = widths.LongpathWidth;
+        ValidationText.Text = _mapSettings.Error ?? loaded.Error ??
             (string.IsNullOrWhiteSpace(loaded.Configuration.GeoJsonPath)
-                ? $"Keine Datei konfiguriert. Einstellungen: {_store.Path}"
+                ? $"Keine Datei konfiguriert. DXCC: {_store.Path} · Kartenoptionen: {_mapSettings.Path}"
                 : "Konfigurierte Datei noch nicht geprüft.");
+    }
+
+    private static double[] WidthChoices(double current, double defaultWidth) =>
+        Enumerable.Range(0, (int)((MapPathWidths.Maximum - MapPathWidths.Minimum) / MapPathWidths.Step) + 1)
+            .Select(index => MapPathWidths.Minimum + index * MapPathWidths.Step)
+            .Append(defaultWidth)
+            .Append(current) // Retain any valid fractional value supplied in the configuration.
+            .Distinct()
+            .Order()
+            .ToArray();
+
+    private void ResetWidths_Click(object sender, RoutedEventArgs e)
+    {
+        ShortpathWidthBox.SelectedItem = MapPathWidths.DefaultShortpathWidth;
+        LongpathWidthBox.SelectedItem = MapPathWidths.DefaultLongpathWidth;
     }
 
     private async void Browse_Click(object sender, RoutedEventArgs e)
@@ -96,9 +120,17 @@ public partial class DxccMapSettingsWindow : Window
             return;
         }
 
+        var widthsSaved = false;
         try
         {
-            _store.Save(new DxccMapConfiguration(path, EnabledByDefaultCheck.IsChecked == true));
+            // Commit the general settings before a DXCC save can remove legacy fields.
+            _mapSettings.Save(new MapSettings(
+                (double)ShortpathWidthBox.SelectedItem,
+                (double)LongpathWidthBox.SelectedItem));
+            widthsSaved = true;
+            var configuration = new DxccMapConfiguration(path, EnabledByDefaultCheck.IsChecked == true);
+            if (configuration != _initialDxccConfiguration)
+                _store.Save(configuration);
             if (!valid)
             {
                 MessageBox.Show(this,
@@ -109,7 +141,10 @@ public partial class DxccMapSettingsWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "DXCC-Kartenoverlay",
+            var message = widthsSaved
+                ? $"Linienbreiten wurden gespeichert. DXCC-Einstellungen konnten nicht gespeichert werden: {ex.Message}"
+                : ex.Message;
+            MessageBox.Show(this, message, "Kartenoptionen",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

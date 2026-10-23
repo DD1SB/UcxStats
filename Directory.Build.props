@@ -1,9 +1,10 @@
 <Project>
   <PropertyGroup>
     <!-- Existing application baseline (MainWindow/README); the installer reads this source. -->
-    <Version>0.12.3.3</Version>
+    <Version>0.12.3.4</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetLockFilePath Condition="'$(UcxStatsWindowsPublish)' == 'true'">$(MSBuildProjectDirectory)/packages.win-x64.lock.json</NuGetLockFilePath>
   </PropertyGroup>

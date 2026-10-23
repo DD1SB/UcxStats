@@ -58,6 +58,14 @@ offline, as the intended normal user. Setup does not download prerequisites.
 https://developer.microsoft.com/microsoft-edge/webview2/
 .NET/WPF runtimes and Leaflet assets are included in the payload.
 
+Licensing: payload/LICENSE is the MIT license for the UcxStats application.
+Dependencies retain their own licenses and copyrights. See
+payload/THIRD-PARTY-NOTICES.txt, payload/ThirdPartyNotices/ and
+payload/Assets/Leaflet/LICENSE. These files are also installed with the app.
+The application license grants no rights to AmazingProducer's external
+dxcc.geojson; obtain the dataset and permissions separately. It is excluded
+from this ZIP and the installer, as are local user configuration and logs.
+
 Before release, verify on Windows: compiler success, installer reproducibility,
 missing/present WebView2, standard-user install and shortcuts, first launch with
 no .NET installation, ordinary/live maps, optional external DXCC overlay, upgrade,

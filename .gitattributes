@@ -1,0 +1,7 @@
+# Keep hash-pinned license and map assets byte-for-byte across checkouts.
+/LICENSE -text
+/THIRD-PARTY-NOTICES.txt -text
+/src/UcxStats.Wpf/Assets/Leaflet/** -text
+
+# Upstream notices retain their original line endings and whitespace verbatim.
+/third-party/** -text -whitespace

@@ -38,7 +38,7 @@ UcxStats.Data
 - `UcxStats.Core`: UCX format only; no UI or database dependency.
 - `UcxStats.Data`: private SQLite persistence and later read-only statistics/query API.
 - `UcxStats.Geo`: deterministic geographic calculations and later short/long-path geometry.
-- `UcxStats.Map`: browser-neutral map-page generation, external DXCC map configuration, normalized GeoJSON serialization, and compact status payloads.
+- `UcxStats.Map`: browser-neutral map-page generation, map path-width/external DXCC configuration, normalized GeoJSON serialization, and compact status payloads.
 - `UcxStats.Wpf`: local desktop UI.
 - Future map: a small Leaflet web surface hosted by UcxStats and consumable from WebView2, browser/projector or OBS browser source.
 
@@ -90,3 +90,23 @@ The catalog, UCX mapping, WAE resolver and geometry normalizer are separate laye
 Each map has a private local `MapWeb/<window-id>` directory behind the existing `https://ucxstats.local` WebView2 mapping. Valid normalized geometry is staged there and fetched once per generated page. JavaScript indexes layers only by numeric entity ID and exposes `ucxSetDxccStatus`, `ucxSetDxccVisible`, and `ucxRefreshDxccStyles`. Band changes run `setStyle()` over the resident layer; they do not re-fetch GeoJSON. DXCC geometry uses a pane below day/night, paths, and markers and is excluded from marker `fitBounds`.
 
 Configuration failure, geometry failure, and status-query failure are isolated from normal map initialization. Each window owns its own visibility flag; `MapSyncService` continues to synchronize view only. Live Map keeps incremental marker insertion and sends a complete compact status snapshot after relevant database refreshes.
+
+General presentation uses `MapSettings` in `map-settings.json`; DXCC path and
+default visibility remain in `map-dxcc.json`. `MapPathWidths` preserves the
+original 1.3/1.0 px defaults and validates finite 0.5–8.0 px values per field.
+`App.MapSettings` initializes one `MapSettingsService`, shared by MainWindow,
+dialogs, normal/SQL maps and Live Map. `MapSettingsStore` resolves each field from
+valid general settings, valid legacy DXCC widths, then defaults. It atomically
+commits complete general settings before removing only legacy width fields from
+the DXCC JSON object, retaining all unknown fields. Completed startup migration
+does not rewrite either file; fresh installs create neither file until needed.
+Both stores flush a same-directory temporary file and atomically replace the
+target, skipping unchanged documents. Malformed files are reported and preserved;
+interrupted migrations retry safely. The two files do not form one transaction.
+
+WPF's map settings dialog persists general values through that service, which
+broadcasts successful changes; open maps execute
+`ucxSetPathWidths`, restyling only resident Shortpath/Longpath polylines via
+`setStyle({weight:…})`. HTML navigation is unnecessary. The JavaScript `addQso`
+function reads current widths for initial, appended and replaced Live Map paths.
+See [map documentation](MAP_DXCC.md) for persistence and Windows acceptance checks.

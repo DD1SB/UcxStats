@@ -17,6 +17,14 @@
     <ProjectReference Include="..\UcxStats.Map\UcxStats.Map.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="..\..\LICENSE;..\..\THIRD-PARTY-NOTICES.txt"
+             Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\third-party\**\*"
+             Link="ThirdPartyNotices\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\Leaflet\**\*"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
