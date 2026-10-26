@@ -24,6 +24,19 @@ public partial class MapWindow : Window
     private readonly string _mapWebFolder;
     private IReadOnlyList<MapQsoPoint> _points;
     private QsoScope _scope;
+    private readonly bool _isLiveMap;
+    private MapSettings _presentationSettings;
+    private MapSettings StatisticsSettings => _mapSettings.Current.WithPresentationFrom(_presentationSettings);
+    private int _lastPauseThreshold;
+    private int? _lastAllowance;
+    private CancellationTokenSource? _statisticsCancellation;
+    private QsoStatisticsSnapshot? _statisticsSnapshot;
+    private int _statisticsGeneration;
+    private int _statisticsPayloadGeneration;
+    private int _dataGeneration;
+    private bool _closed;
+    private string _statisticsPerformance = string.Empty;
+    private string _timelinePerformance = string.Empty;
     private bool _fullscreen;
     private bool _dxccGeometryPrepared;
     private bool _dxccGeometryAvailable;
@@ -41,15 +54,20 @@ public partial class MapWindow : Window
         QsoScope scope,
         IReadOnlyList<MapQsoPoint> points,
         string title,
-        MapSettingsService? mapSettings = null)
+        MapSettingsService? mapSettings = null,
+        bool isLiveMap = false)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(scope);
         InitializeComponent();
         _repository = repository;
+        _isLiveMap = isLiveMap;
         _scope = scope;
         _points = points;
         _mapSettings = mapSettings ?? App.MapSettings;
+        _presentationSettings = _mapSettings.Current;
+        _lastPauseThreshold = _mapSettings.Current.ContestPauseThresholdMinutes;
+        _lastAllowance = _mapSettings.Current.OperatingTimeAllowanceMinutes;
         _mapWebFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "UcxStats",
@@ -83,7 +101,9 @@ public partial class MapWindow : Window
             ConfigureWebView(core);
             core.WebMessageReceived -= CoreWebView2_WebMessageReceived;
             core.WebMessageReceived += CoreWebView2_WebMessageReceived;
+            var generation = _dataGeneration;
             var dxcc = await PrepareDxccPageAsync();
+            if (_closed || generation != _dataGeneration) return;
             NavigateMap(_points, dxcc);
             SetMapStatus($"{_points.Count:N0} QSOs mit Locator und Stations-QTH · Tiles: {_tileSettings.ProviderName}.");
         }
@@ -100,6 +120,8 @@ public partial class MapWindow : Window
         QsoScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
+        var generation = ++_dataGeneration;
+        InvalidateStatistics();
         _points = points;
         _scope = scope;
         _dxccGeometryPrepared = false;
@@ -119,6 +141,7 @@ public partial class MapWindow : Window
         }
 
         var dxcc = await PrepareDxccPageAsync();
+        if (_closed || generation != _dataGeneration) return;
         NavigateMap(_points, dxcc);
         SetMapStatus($"{_points.Count:N0} QSOs mit Locator und Stations-QTH · Tiles: {_tileSettings.ProviderName}.");
     }
@@ -129,6 +152,8 @@ public partial class MapWindow : Window
         QsoScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
+        var generation = ++_dataGeneration;
+        InvalidateStatistics();
         HeaderText.Text = title;
         _scope = scope;
 
@@ -160,15 +185,85 @@ public partial class MapWindow : Window
                 $"window.ucxAppendQsos && window.ucxAppendQsos({json});");
         }
 
+        if (_closed || generation != _dataGeneration) return;
         // This is deliberately independent of marker additions: a locator-less QSO can
         // change an entity state even when the WebView receives no new MapQsoPoint.
         await RefreshDxccStatusAsync();
+        if (_closed || generation != _dataGeneration) return;
+        await RefreshStatisticsAsync();
+        if (_closed || generation != _dataGeneration) return;
         _points = points;
         SetMapStatus(requiresReplacement
             ? $"{_points.Count:N0} QSOs · Live-Kartendaten aktualisiert."
             : added.Count == 0
             ? $"{_points.Count:N0} QSOs · keine neuen kartierbaren QSOs."
             : $"{_points.Count:N0} QSOs · +{added.Count:N0} live hinzugefügt.");
+    }
+
+    private void InvalidateStatistics()
+    {
+        _statisticsGeneration++;
+        _statisticsPayloadGeneration++;
+        _statisticsCancellation?.Cancel();
+        _statisticsSnapshot = null;
+    }
+
+    private async Task RefreshStatisticsAsync()
+    {
+        _statisticsCancellation?.Cancel();
+        _statisticsCancellation?.Dispose();
+        _statisticsCancellation = new CancellationTokenSource();
+        var token = _statisticsCancellation.Token;
+        var generation = ++_statisticsGeneration;
+        var scope = _scope;
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            // Microsoft.Data.Sqlite async reads can run synchronously. Keep the entire
+            // query and aggregation off the WPF dispatcher, including initialization.
+            var snapshot = await Task.Run(() => _repository.GetMapStatisticsAsync(scope, token), token);
+            if (_closed || token.IsCancellationRequested || generation != _statisticsGeneration) return;
+            _statisticsSnapshot = snapshot;
+            _statisticsPerformance = $"Statistik: Abfrage/Aggregation {watch.Elapsed.TotalMilliseconds:N1} ms";
+            await ApplyStatisticsAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (_closed || generation != _statisticsGeneration) return;
+            _statisticsPerformance = $"Statistik nicht verfügbar: {ex.Message}";
+            UpdateStatusText();
+        }
+    }
+
+    private async Task ApplyStatisticsAsync(bool includeSnapshot = true)
+    {
+        if (_closed || MapWebView.CoreWebView2 is null) return;
+        var generation = includeSnapshot ? ++_statisticsPayloadGeneration : _statisticsPayloadGeneration;
+        var snapshot = _statisticsSnapshot;
+        var settings = StatisticsSettings;
+        try
+        {
+            await MapWebView.ExecuteScriptAsync(MapStatisticsPayload.BuildSettingsScript(settings));
+            if (!includeSnapshot || snapshot is null) return;
+            var watch = Stopwatch.StartNew();
+            var payload = await Task.Run(() => (
+                Statistics: MapStatisticsPayload.Serialize(snapshot, settings),
+                Timeline: _isLiveMap ? LiveTimelinePayload.Serialize(LiveTimelinePayload.Create(snapshot, DateTimeOffset.UtcNow)) : null));
+            var json = payload.Statistics;
+            if (_closed || generation != _statisticsPayloadGeneration) return;
+            _statisticsPerformance = _statisticsPerformance.Split(" · JSON", StringSplitOptions.None)[0] +
+                $" · JSON {watch.Elapsed.TotalMilliseconds:N1} ms / {System.Text.Encoding.UTF8.GetByteCount(json):N0} Bytes" +
+                (payload.Timeline is null ? "" : $" · Verlauf {System.Text.Encoding.UTF8.GetByteCount(payload.Timeline):N0} Bytes");
+            await MapWebView.ExecuteScriptAsync(MapStatisticsPayload.BuildSnapshotScript(json));
+            if (payload.Timeline is not null && !_closed && generation == _statisticsPayloadGeneration)
+                await MapWebView.ExecuteScriptAsync(LiveTimelinePayload.BuildScript(payload.Timeline));
+            UpdateStatusText();
+        }
+        catch
+        {
+            // A ready page receives the latest snapshot on NavigationCompleted.
+        }
     }
 
     private async Task<MapDxccPageOptions> PrepareDxccPageAsync()
@@ -283,6 +378,9 @@ public partial class MapWindow : Window
 
     private void MapWindow_Closed(object? sender, EventArgs e)
     {
+        _closed = true;
+        InvalidateStatistics();
+        _statisticsCancellation?.Dispose();
         MapSyncService.ViewChanged -= MapSyncService_ViewChanged;
         _mapSettings.Changed -= MapSettings_Changed;
         if (MapWebView.CoreWebView2 is not null)
@@ -312,6 +410,49 @@ public partial class MapWindow : Window
                 return;
 
             var type = typeElement.GetString();
+            if (type == "mapPresentation")
+            {
+                var requested = root.GetProperty("settings").Deserialize<MapSettings>(new JsonSerializerOptions
+                { PropertyNameCaseInsensitive = true })?.Normalize();
+                if (requested is null) return;
+                _presentationSettings = _presentationSettings.WithPresentationFrom(requested);
+                _mapSettings.Save(_mapSettings.Current.WithPresentationFrom(_presentationSettings));
+                return;
+            }
+            if (type == "timelinePerformance")
+            {
+                _timelinePerformance = $"Verlauf render: {root.GetProperty("milliseconds").GetDouble():N2} ms / {root.GetProperty("samples").GetInt32():N0} Zeitwerte";
+                UpdateStatusText();
+                return;
+            }
+            if (type == "statisticsVisibility")
+            {
+                _presentationSettings = _presentationSettings with { StatisticsVisible = root.GetProperty("visible").GetBoolean() };
+                _mapSettings.Save(_mapSettings.Current.WithPresentationFrom(_presentationSettings));
+                return;
+            }
+            if (type == "liveThresholdPreferences")
+            {
+                var warning = root.GetProperty("warningMinutes").GetInt32();
+                var prolonged = root.GetProperty("prolongedMinutes").GetInt32();
+                _mapSettings.Save(LiveThresholdUi.Apply(_mapSettings.Current, warning, prolonged));
+                return;
+            }
+            if (type == "statisticsPreferences")
+            {
+                var value = root.GetProperty("settings");
+                _presentationSettings = _presentationSettings with { ContestTimeVisible = value.GetProperty("contestTimeVisible").GetBoolean() };
+                _mapSettings.Save(_mapSettings.Current with
+                {
+                    ContestTimeVisible = _presentationSettings.ContestTimeVisible,
+                    ContestPauseThresholdMinutes = value.GetProperty("contestPauseThresholdMinutes").GetInt32(),
+                    OperatingTimeAllowanceMinutes = value.GetProperty("operatingTimeAllowanceMinutes").ValueKind == JsonValueKind.Null
+                        ? null : value.GetProperty("operatingTimeAllowanceMinutes").GetInt32(),
+                    LiveWarningThresholdMinutes = value.GetProperty("liveWarningThresholdMinutes").GetInt32(),
+                    LiveProlongedGapThresholdMinutes = value.GetProperty("liveProlongedGapThresholdMinutes").GetInt32()
+                });
+                return;
+            }
             if (type == "tileError")
             {
                 SetMapStatus(
@@ -368,9 +509,9 @@ public partial class MapWindow : Window
                 root.GetProperty("lon").GetDouble(),
                 root.GetProperty("zoom").GetDouble());
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore malformed browser messages.
+            SetMapStatus($"Kartenmeldung konnte nicht verarbeitet werden: {ex.Message}");
         }
     }
 
@@ -393,14 +534,22 @@ public partial class MapWindow : Window
 
     private async void MapSettings_Changed(MapSettings settings)
     {
+        var recalculateTime = settings.ContestPauseThresholdMinutes != _lastPauseThreshold ||
+            settings.OperatingTimeAllowanceMinutes != _lastAllowance;
+        _lastPauseThreshold = settings.ContestPauseThresholdMinutes;
+        _lastAllowance = settings.OperatingTimeAllowanceMinutes;
         await ApplyPathWidthsAsync();
+        await ApplyStatisticsAsync(includeSnapshot: recalculateTime);
     }
 
     private async void MapWebView_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         // A save during page initialization must also reach the newly ready page.
-        if (e.IsSuccess)
+        if (e.IsSuccess && !_closed)
+        {
             await ApplyPathWidthsAsync();
+            await RefreshStatisticsAsync();
+        }
     }
 
     private async Task ApplyPathWidthsAsync()
@@ -456,7 +605,7 @@ public partial class MapWindow : Window
             _tileSettings.UrlTemplate,
             _tileSettings.Attribution,
             _tileSettings.MaxZoom);
-        File.WriteAllText(htmlPath, MapPageBuilder.Build(points, tileDefinition, dxcc, _mapSettings.Current.PathWidths));
+        File.WriteAllText(htmlPath, MapPageBuilder.Build(points, tileDefinition, dxcc, _mapSettings.Current.PathWidths, StatisticsSettings, _isLiveMap));
         var cacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         MapWebView.CoreWebView2?.Navigate($"https://{MapVirtualHost}/map.html?v={cacheBust}");
     }
@@ -469,7 +618,7 @@ public partial class MapWindow : Window
 
     private void UpdateStatusText()
     {
-        var parts = new[] { _mapStatus, _dxccDiagnostic, _dxccPerformance }
+        var parts = new[] { _mapStatus, _dxccDiagnostic, _dxccPerformance, _statisticsPerformance, _timelinePerformance }
             .Where(x => !string.IsNullOrWhiteSpace(x));
         StatusText.Text = string.Join(" · ", parts);
     }

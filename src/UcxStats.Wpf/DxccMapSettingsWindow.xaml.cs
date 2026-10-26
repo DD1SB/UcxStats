@@ -124,9 +124,11 @@ public partial class DxccMapSettingsWindow : Window
         try
         {
             // Commit the general settings before a DXCC save can remove legacy fields.
-            _mapSettings.Save(new MapSettings(
-                (double)ShortpathWidthBox.SelectedItem,
-                (double)LongpathWidthBox.SelectedItem));
+            _mapSettings.Save(_mapSettings.Current with
+            {
+                ShortpathWidth = (double)ShortpathWidthBox.SelectedItem,
+                LongpathWidth = (double)LongpathWidthBox.SelectedItem
+            });
             widthsSaved = true;
             var configuration = new DxccMapConfiguration(path, EnabledByDefaultCheck.IsChecked == true);
             if (configuration != _initialDxccConfiguration)

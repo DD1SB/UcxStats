@@ -482,7 +482,108 @@ public sealed class RepositoryDxccTests
         });
     }
 
-    private static QsoImportRecord Import(
+    [Fact]
+    public async Task MapStatisticsHonorAllScopesIncludingSqlResultAndLiveBoundary()
+    {
+        await using var database = await TestDatabase.CreateAsync(
+            Import("a.ucx", 1, "EA", 4),
+            Import("a.ucx", 2, "DL", 2, new DateOnly(2026, 1, 2)),
+            Import("b.ucx", 3, "XYZ", 16));
+        var repo = database.Repository;
+        var all = await repo.GetMapStatisticsAsync(QsoScope.All);
+        Assert.Equal(3, all.Summarize().TotalQsos);
+        Assert.Equal(0, all.Summarize().MappableQsos);
+        Assert.Equal(2, all.Summarize().Dxccs);
+        Assert.Equal(2, (await repo.GetMapStatisticsAsync(QsoScope.ForSources(["a.ucx"]))).Summarize().TotalQsos);
+        Assert.Equal(1, (await repo.GetMapStatisticsAsync(QsoScope.ForSourceRecords(
+            [new("a.ucx", 2), new("a.ucx", 2)]))).Summarize().TotalQsos);
+        var sql = await repo.ExecuteReadOnlyQueryAsync("SELECT id AS qso_id FROM qso WHERE band_code=16");
+        var sqlScope = QsoScope.ForQsoIds(sql.Rows.Select(x => Convert.ToInt64(x[0])));
+        Assert.Equal(1, (await repo.GetMapStatisticsAsync(sqlScope)).Summarize().TotalQsos);
+        var liveScope = QsoScope.ForSources(["a.ucx"]).WithFromUtc(new DateTime(2026, 1, 2, 12, 0, 0, DateTimeKind.Utc));
+        var live = await repo.GetMapStatisticsAsync(liveScope);
+        Assert.Equal(1, live.Summarize().TotalQsos);
+        Assert.Equal("EA1AAA", live.LatestQso!.CallSign);
+        Assert.Equal(0, (await repo.GetMapStatisticsAsync(liveScope.WithFromUtc(
+            new DateTime(2026, 1, 2, 12, 0, 1, DateTimeKind.Utc)))).Summarize().TotalQsos);
+        foreach (var empty in new[] { QsoScope.ForSources([]), QsoScope.ForSourceRecords([]), QsoScope.ForQsoIds([]) })
+            Assert.Equal(0, (await repo.GetMapStatisticsAsync(empty)).Summarize().TotalQsos);
+    }
+
+    [Fact]
+    public async Task StatisticsMappabilityAndOdxUseEffectiveProfileAndExistingGeoCache()
+    {
+        var a = Import("a.ucx", 1, "EA", 4) with { Latitude = 40, Longitude = -3 };
+        a = a with { Qso = a.Qso with { Locator = "IN80" } };
+        var b = Import("b.ucx", 2, "DL", 2) with { Latitude = 51, Longitude = 10 };
+        b = b with { Qso = b.Qso with { Locator = "JO50" } };
+        var invalid = Import("a.ucx", 3, "DL", 4);
+        invalid = invalid with { Qso = invalid.Qso with { Locator = "JO40ZZ" } };
+        await using var database = await TestDatabase.CreateAsync(a, b, invalid, Import("c.ucx", 4, "EA", 4));
+        var repo = database.Repository;
+        var home = await repo.SaveStationProfileAsync(new(0, "Home", "JN58", 48, 11, null, "", null));
+        var away = await repo.SaveStationProfileAsync(new(0, "Away", "FN31", 41, -73, null, "", null));
+        await repo.AssignStationProfileToSourcesAsync(["a.ucx", "b.ucx"], home);
+        await using (var connection = new SqliteConnection($"Data Source={database.Path}"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE qso SET station_profile_id=$profile WHERE source_file='b.ucx'";
+            command.Parameters.AddWithValue("$profile", away);
+            await command.ExecuteNonQueryAsync();
+        }
+        await repo.AssignStationProfileToSourcesAsync(["b.ucx"], home); // rebuild effective profiles below
+        await repo.AssignStationProfileToSourcesAsync(["c.ucx"], away); // builds Away cache including per-QSO override
+        var points = await repo.GetMapQsoPointsAsync(QsoScope.All);
+        var snapshot = await repo.GetMapStatisticsAsync(QsoScope.All);
+        Assert.Equal(4, snapshot.Summarize().TotalQsos);
+        Assert.Equal(points.Count, snapshot.Summarize().MappableQsos);
+        Assert.Equal(2, points.Count);
+        Assert.Equal(2, snapshot.Summarize().NonMappableQsos);
+        var odx = snapshot.Summarize().Odx!;
+        var point = points.Single(x => x.Id == odx.QsoId);
+        Assert.Equal("Away", point.StationProfileName);
+        Assert.Equal(point.DistanceKm, odx.DistanceKm);
+        Assert.Equal(points.Max(x => x.DistanceKm), odx.DistanceKm);
+        Assert.Equal("JO50", odx.Locator);
+        Assert.Equal(2, snapshot.Summarize().Grids);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("999")]
+    public async Task StatisticsExcludeExplicitNonDxccEvenWithKnownCountry(string dxcc)
+    {
+        await using var database = await TestDatabase.CreateAsync(Import("a.ucx", 1, "EA", 4));
+        await database.Repository.ImportDclAdifAsync(Adif("EA1AAA", dxcc, "999"));
+        var stats = (await database.Repository.GetMapStatisticsAsync(QsoScope.All)).Summarize();
+        Assert.Equal(1, stats.TotalQsos); Assert.Equal(0, stats.Dxccs); Assert.Null(stats.Odx);
+    }
+
+    [Fact]
+    public async Task ValidLocatorWithoutProfileIsNotMappableAndMissingCacheDoesNotInventOdx()
+    {
+        var import = Import("a.ucx", 1, "DL", 4) with { Latitude = 50, Longitude = 8 };
+        import = import with { Qso = import.Qso with { Locator = "JO40" } };
+        await using var database = await TestDatabase.CreateAsync(import);
+        var repo = database.Repository;
+        var beforeProfile = (await repo.GetMapStatisticsAsync(QsoScope.All)).Summarize();
+        Assert.Equal(1, beforeProfile.TotalQsos); Assert.Equal(1, beforeProfile.Grids);
+        Assert.Equal(0, beforeProfile.MappableQsos); Assert.Null(beforeProfile.Odx);
+        var profile = await repo.SaveStationProfileAsync(new(0, "Home", "JN58", 48, 11, null, "", null));
+        await repo.AssignStationProfileToSourcesAsync(["a.ucx"], profile);
+        await using (var connection = new SqliteConnection($"Data Source={database.Path}"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM qso_geo_cache";
+            await command.ExecuteNonQueryAsync();
+        }
+        var withoutCache = (await repo.GetMapStatisticsAsync(QsoScope.All)).Summarize();
+        Assert.Equal(1, withoutCache.MappableQsos); Assert.Null(withoutCache.Odx);
+    }
+
+    internal static QsoImportRecord Import(
         string source,
         long recordIndex,
         string country,

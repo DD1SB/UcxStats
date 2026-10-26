@@ -7,9 +7,12 @@ public interface IQsoRepository
     string DatabasePath { get; }
     Task InitializeAsync(CancellationToken cancellationToken = default);
     Task<QsoImportResult> UpsertManyAsync(IEnumerable<QsoImportRecord> records, CancellationToken cancellationToken = default);
+    Task<QsoImportResult> ReconcileSourceAsync(string sourceFile, IReadOnlyList<QsoImportRecord> records,
+        CancellationToken cancellationToken = default, Func<QsoImportResult, CancellationToken, Task>? validateBeforeCommit = null);
     Task<DclImportResult> ImportDclAdifAsync(string adifText, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WaeQsoCandidate>> GetWaeQsoCandidatesAsync(CancellationToken cancellationToken = default);
     Task<DxccIdentityAuditResult> GetDxccIdentityAuditAsync(CancellationToken cancellationToken = default);
+    Task<QsoStatisticsSnapshot> GetMapStatisticsAsync(QsoScope scope, CancellationToken cancellationToken = default);
     Task<DxccStatusSnapshot> GetDxccStatusAsync(QsoScope scope, CancellationToken cancellationToken = default);
     Task<QueryResult> ExecuteReadOnlyQueryAsync(string sql, CancellationToken cancellationToken = default);
     Task<long> GetTotalQsoCountAsync(CancellationToken cancellationToken = default);

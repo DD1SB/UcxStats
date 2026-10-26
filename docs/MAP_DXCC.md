@@ -201,3 +201,16 @@ The initial implementation renders one correct primary-world vector overlay. Til
 
 Record these on Windows; Linux build/tests/publish do not establish WPF/WebView2
 runtime behavior or visual pixel rendering.
+
+
+## Optional statistics panel
+
+The independent [QSO statistics panel](MAP_STATISTICS.md) uses the same `QsoScope`,
+effective numeric DXCC identity and band controls as this overlay. Its distinct
+entity totals include recognized current/deleted identities; polygon status styling
+retains its existing current-entity policy. Locator-less QSOs remain included in
+statistics and can update Live activity. The panel also provides Maidenhead unions,
+station-profile ODX and optional full-scope contest-time estimates. It works without
+DXCC geometry, does not fetch/rebuild geometry on updates, and stores preferences
+only in general `map-settings.json`, preserving path widths and DXCC configuration.
+Follow its separate Windows acceptance checklist alongside the overlay/width checks.

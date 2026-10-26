@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Data.Sqlite;
 using UcxStats.Data.Confirmation;
 using UcxStats.Data.Dxcc;
@@ -6,6 +7,7 @@ namespace UcxStats.Data.Database;
 
 public sealed class SqliteQsoRepository : IQsoRepository
 {
+    private const string QsoIdWatermarkKey = "qso_id_high_watermark";
     private static readonly string KnownNormalDxccEntityIdsSql = string.Join(",",
         DxccEntityCatalog.ReleasedAdif317.Entries
             .Where(x => x.Status is DxccCatalogEntityStatus.Current or DxccCatalogEntityStatus.Deleted)
@@ -26,7 +28,8 @@ public sealed class SqliteQsoRepository : IQsoRepository
         {
             DataSource = DatabasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared
+            Cache = SqliteCacheMode.Shared,
+            ForeignKeys = true
         }.ToString();
     }
 
@@ -158,40 +161,22 @@ public sealed class SqliteQsoRepository : IQsoRepository
 
     public async Task<QsoImportResult> UpsertManyAsync(IEnumerable<QsoImportRecord> records, CancellationToken cancellationToken = default)
     {
+        var items = records.ToArray();
         await InitializeAsync(cancellationToken);
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         using var transaction = connection.BeginTransaction();
 
-        var inserted = 0;
-        var updated = 0;
-        var unchanged = 0;
+        var result = await UpsertRecordsAsync(connection, transaction, items, false, cancellationToken);
 
-        foreach (var item in records)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var existingHash = await GetExistingHashAsync(connection, transaction, item.SourceFile, item.SourceRecordIndex, cancellationToken);
-            if (existingHash == item.SourceRecordHash)
-            {
-                unchanged++;
-                continue;
-            }
-
-            var exists = existingHash is not null;
-            await UpsertAsync(connection, transaction, item, cancellationToken);
-            await DeleteGeoCacheForQsoAsync(connection, transaction, item.SourceFile, item.SourceRecordIndex, cancellationToken);
-            if (exists) updated++; else inserted++;
-        }
-
-        foreach (var group in records.GroupBy(x => x.SourceFile, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in items.GroupBy(x => x.SourceFile, StringComparer.OrdinalIgnoreCase))
         {
             await UpsertSourceAsync(connection, transaction, group.Key, group.LongCount(), cancellationToken);
         }
 
         transaction.Commit();
 
-        var importedSources = records.Select(x => x.SourceFile).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var importedSources = items.Select(x => x.SourceFile).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         foreach (var source in importedSources)
         {
             await using var profileCommand = connection.CreateCommand();
@@ -200,7 +185,120 @@ public sealed class SqliteQsoRepository : IQsoRepository
             var value = await profileCommand.ExecuteScalarAsync(cancellationToken);
             if (value is not null && value != DBNull.Value) await RebuildGeoCacheForProfileAsync(connection, Convert.ToInt64(value), null, cancellationToken);
         }
-        return new QsoImportResult(inserted, updated, unchanged);
+        return result;
+    }
+
+    // This is a complete, ordered source snapshot, unlike incremental UpsertManyAsync.
+    // The importer supplies a final on-disk validation while we still hold the writer lock.
+    public async Task<QsoImportResult> ReconcileSourceAsync(string sourceFile, IReadOnlyList<QsoImportRecord> records,
+        CancellationToken cancellationToken = default, Func<QsoImportResult, CancellationToken, Task>? validateBeforeCommit = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceFile);
+        ArgumentNullException.ThrowIfNull(records);
+        if (!Path.IsPathFullyQualified(sourceFile)) throw new ArgumentException("Eine vollständige UCX-Quelle benötigt einen absoluten Pfad.", nameof(sourceFile));
+        var items = records.ToArray();
+        for (var i = 0; i < items.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var item = items[i];
+            if (item.SourceFile != sourceFile || item.SourceRecordIndex != i || item.Qso.RecordIndex != i || string.IsNullOrWhiteSpace(item.SourceRecordHash))
+                throw new ArgumentException("UCX-Snapshot muss genau eine Quelle und alle Record-Indizes ab 0 enthalten.", nameof(records));
+        }
+        await InitializeAsync(cancellationToken);
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction(deferred: false);
+        var result = await UpsertRecordsAsync(connection, transaction, items, true, cancellationToken);
+        await using (var reserve = connection.CreateCommand())
+        {
+            reserve.Transaction = transaction;
+            // qso predates AUTOINCREMENT. Keep deleted IDs unavailable to later inserts,
+            // so existing selected/SQL scopes cannot silently refer to another QSO.
+            reserve.CommandText = $"""
+                INSERT INTO ucxstats_metadata(key,value)
+                VALUES('{QsoIdWatermarkKey}',COALESCE((SELECT MAX(id) FROM qso),0))
+                ON CONFLICT(key) DO UPDATE SET value=MAX(CAST(value AS INTEGER),CAST(excluded.value AS INTEGER));
+                """;
+            await reserve.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.Transaction = transaction;
+            // Contiguous indices were validated above; this also covers a zero-record snapshot.
+            delete.CommandText = "DELETE FROM qso WHERE source_file=$source AND (source_record_index<0 OR source_record_index >= $count);";
+            delete.Parameters.AddWithValue("$source", sourceFile);
+            delete.Parameters.AddWithValue("$count", items.Length);
+            result = result with { Deleted = await delete.ExecuteNonQueryAsync(cancellationToken) };
+        }
+        await UpsertSourceAsync(connection, transaction, sourceFile, items.Length, cancellationToken);
+        await FillSourceGeoCacheAsync(connection, transaction, sourceFile, cancellationToken);
+        if (validateBeforeCommit is not null) await validateBeforeCommit(result, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private static async Task<QsoImportResult> UpsertRecordsAsync(SqliteConnection connection, SqliteTransaction transaction,
+        IEnumerable<QsoImportRecord> records, bool reconcileDcl, CancellationToken cancellationToken)
+    {
+        var inserted = 0; var updated = 0; var unchanged = 0;
+        foreach (var item in records)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var existingHash = await GetExistingHashAsync(connection, transaction, item.SourceFile, item.SourceRecordIndex, cancellationToken);
+            if (existingHash == item.SourceRecordHash) { unchanged++; continue; }
+            if (existingHash is not null && reconcileDcl)
+            {
+                // A shifted/replaced record must not inherit another QSO's DCL match.
+                // Remarks/locator/status-only edits retain the existing match and profile override.
+                await using var clear = connection.CreateCommand();
+                clear.Transaction = transaction;
+                clear.CommandText = """
+                    UPDATE qso SET dcl_status=NULL,dcl_dxcc=NULL,dcl_adif2=NULL
+                    WHERE source_file=$source AND source_record_index=$index AND
+                      (UPPER(callsign)<>UPPER($call) OR qso_date<>$date OR start_time<>$time OR band_code<>$band OR mode_code<>$mode);
+                    """;
+                clear.Parameters.AddWithValue("$source", item.SourceFile); clear.Parameters.AddWithValue("$index", item.SourceRecordIndex);
+                clear.Parameters.AddWithValue("$call", item.Qso.CallSign); clear.Parameters.AddWithValue("$date", item.Qso.Date.ToString("yyyy-MM-dd"));
+                clear.Parameters.AddWithValue("$time", item.Qso.StartTime.ToString("HH:mm:ss")); clear.Parameters.AddWithValue("$band", item.Qso.BandCode);
+                clear.Parameters.AddWithValue("$mode", item.Qso.ModeCode);
+                await clear.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await UpsertAsync(connection, transaction, item, cancellationToken);
+            await DeleteGeoCacheForQsoAsync(connection, transaction, item.SourceFile, item.SourceRecordIndex, cancellationToken);
+            if (existingHash is null) inserted++; else updated++;
+        }
+        return new(inserted, updated, unchanged);
+    }
+
+    private static async Task FillSourceGeoCacheAsync(SqliteConnection connection, SqliteTransaction transaction,
+        string sourceFile, CancellationToken cancellationToken)
+    {
+        var rows = new List<(long Qso, long Profile, double OwnLat, double OwnLon, double Lat, double Lon)>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.Transaction = transaction;
+            query.CommandText = $"""
+                SELECT q.id,p.id,p.latitude,p.longitude,q.latitude,q.longitude FROM qso q
+                {MapStationJoinsSql}
+                WHERE q.source_file=$source AND ({MapEligibilitySql}) AND g.qso_id IS NULL;
+                """;
+            query.Parameters.AddWithValue("$source", sourceFile);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                rows.Add((reader.GetInt64(0), reader.GetInt64(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetDouble(4), reader.GetDouble(5)));
+        }
+        await using var insert = connection.CreateCommand(); insert.Transaction = transaction;
+        insert.CommandText = "INSERT INTO qso_geo_cache(qso_id,station_profile_id,distance_km,bearing_deg) VALUES($q,$p,$d,$b);";
+        var q = insert.Parameters.Add("$q", SqliteType.Integer); var p = insert.Parameters.Add("$p", SqliteType.Integer);
+        var d = insert.Parameters.Add("$d", SqliteType.Real); var b = insert.Parameters.Add("$b", SqliteType.Real);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var geo = CalculateGeo(row.OwnLat, row.OwnLon, row.Lat, row.Lon);
+            q.Value = row.Qso; p.Value = row.Profile; d.Value = geo.DistanceKm; b.Value = geo.BearingDeg;
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task<DclImportResult> ImportDclAdifAsync(
@@ -739,12 +837,13 @@ public sealed class SqliteQsoRepository : IQsoRepository
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT q.source_file, COUNT(*), s.last_imported_utc, s.station_profile_id, p.name
-            FROM qso q
-            LEFT JOIN source_file s ON s.full_path = q.source_file
-            LEFT JOIN station_profile p ON p.id = s.station_profile_id
-            GROUP BY q.source_file, s.last_imported_utc, s.station_profile_id, p.name
-            ORDER BY q.source_file COLLATE NOCASE;
+            SELECT paths.full_path, COUNT(q.id), s.last_imported_utc, s.station_profile_id, p.name
+            FROM (SELECT full_path FROM source_file UNION SELECT source_file FROM qso) paths
+            LEFT JOIN source_file s ON s.full_path=paths.full_path
+            LEFT JOIN qso q ON q.source_file=paths.full_path
+            LEFT JOIN station_profile p ON p.id=s.station_profile_id
+            GROUP BY paths.full_path, s.last_imported_utc, s.station_profile_id, p.name
+            ORDER BY paths.full_path COLLATE NOCASE;
             """;
         var result = new List<SourceSummary>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -759,6 +858,45 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 reader.IsDBNull(4) ? null : reader.GetString(4)));
         }
         return result;
+    }
+
+    private readonly ConcurrentDictionary<string, string> _statisticsLocatorCache = new(StringComparer.Ordinal);
+
+    // The marker query and statistics deliberately share their eligibility and station/cache joins.
+    private const string MapEligibilitySql = "q.latitude IS NOT NULL AND q.longitude IS NOT NULL AND p.id IS NOT NULL";
+    private const string MapStationJoinsSql = """
+        LEFT JOIN source_file sf ON sf.full_path=q.source_file
+        LEFT JOIN station_profile p ON p.id=COALESCE(q.station_profile_id,sf.station_profile_id)
+        LEFT JOIN qso_geo_cache g ON g.qso_id=q.id AND g.station_profile_id=p.id
+        """;
+
+    public async Task<QsoStatisticsSnapshot> GetMapStatisticsAsync(QsoScope scope, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        await InitializeAsync(cancellationToken);
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        var filters = QsoScopeSql.AddFilters(command, scope);
+        command.CommandText = $"""
+            SELECT q.id,q.callsign,q.band_code,q.locator,q.qso_date,q.start_time,
+                   CASE WHEN q.dcl_dxcc IN ({ExplicitNonDxccCodesSql}) THEN NULL ELSE q.dxcc_entity_id END,
+                   ({MapEligibilitySql}),g.distance_km
+            FROM qso q
+            {MapStationJoinsSql}
+            {(filters.Count == 0 ? "" : "WHERE " + string.Join(" AND ", filters))};
+            """;
+        var accumulator = new QsoStatisticsAccumulator(_statisticsLocatorCache);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            accumulator.Add(reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
+                reader.GetString(4), reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                reader.GetBoolean(7), reader.IsDBNull(8) ? null : reader.GetDouble(8));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return accumulator.Build();
     }
 
     public async Task<IReadOnlyList<MapQsoPoint>> GetMapQsoPointsByIdsAsync(
@@ -787,16 +925,14 @@ public sealed class SqliteQsoRepository : IQsoRepository
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
-        var filters = new List<string> { "q.latitude IS NOT NULL", "q.longitude IS NOT NULL", "p.id IS NOT NULL" };
+        var filters = new List<string> { MapEligibilitySql };
         filters.AddRange(QsoScopeSql.AddFilters(command, scope));
 
         command.CommandText = $"""
             SELECT q.id,q.source_file,q.callsign,q.qso_date,q.start_time,q.band_code,q.mode_code,
                    q.locator,q.latitude,q.longitude,p.name,p.latitude,p.longitude,g.distance_km,g.bearing_deg
             FROM qso q
-            LEFT JOIN source_file sf ON sf.full_path=q.source_file
-            LEFT JOIN station_profile p ON p.id=COALESCE(q.station_profile_id,sf.station_profile_id)
-            LEFT JOIN qso_geo_cache g ON g.qso_id=q.id AND g.station_profile_id=p.id
+            {MapStationJoinsSql}
             WHERE {string.Join(" AND ", filters)}
             ORDER BY q.qso_date,q.start_time,q.id;
             """;
@@ -1025,7 +1161,7 @@ public sealed class SqliteQsoRepository : IQsoRepository
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO qso (
-                source_file, source_record_index, source_record_hash, record_type_raw,
+                id, source_file, source_record_index, source_record_hash, record_type_raw,
                 qso_date, start_time, end_time, callsign,
                 sent_rst, sent_exchange, received_rst, received_exchange,
                 band_code, mode_code, rx_frequency_hz, qth, name, remarks,
@@ -1036,6 +1172,8 @@ public sealed class SqliteQsoRepository : IQsoRepository
                 manager, cba, manager_ok, qsl_send_datetime,
                 award1, count1, award2, count2
             ) VALUES (
+                (SELECT MAX(COALESCE((SELECT MAX(id) FROM qso),0),
+                    CAST(COALESCE((SELECT value FROM ucxstats_metadata WHERE key='{QsoIdWatermarkKey}'),'0') AS INTEGER))+1),
                 $source_file, $source_record_index, $source_record_hash, $record_type_raw,
                 $qso_date, $start_time, $end_time, $callsign,
                 $sent_rst, $sent_exchange, $received_rst, $received_exchange,

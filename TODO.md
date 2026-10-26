@@ -1,12 +1,26 @@
 # Todo
 
+## 0.12.3.5 Beta follow-up
+
+- [ ] Run the new [source deletion Windows checks](docs/MAP_STATISTICS.md#ucx-deletion-reconciliation-and-live-refresh),
+  including active writers, two/one/zero records, restart, source switching and
+  retained map state. Earlier UI runtime acceptance is user-reported; Linux does
+  not execute WPF/WebView2 or native Windows sharing rules.
+- [ ] On Windows, compile the final Beta packaging ZIP with Inno Setup 6.7.3 and
+  complete installer/upgrade checks below. Then create the beta Git tag/GitHub
+  pre-release manually and attach the installer plus its checksum and release notes.
+- [ ] Record real WebView2/Live and geo-rebuild timings on >11,000 QSOs and larger
+  logs; Linux synthetic and DOM-double checks do not establish native paint cost.
+- [ ] Consider contest-specific rules/contest-duration modeling and CAT/current-band
+  awareness in later milestones. Current time estimates do not claim compliance.
+
 ## Map line-width Windows acceptance
 
 - [ ] Verify the [configuration migration procedure](docs/MAP_DXCC.md#configuration-migration-and-recovery)
   on Windows: legacy-only, complete/partial general settings, unknown DXCC fields,
   locked/read-only destinations, retry after interruption, unchanged files on
   repeated startup and no writes on a fresh installation. Verify both files
-  survive upgrade/uninstall. Use the newly validated 0.12.3.4 payload for these checks.
+  survive upgrade/uninstall. Use the final 0.12.3.5 Beta payload for these checks.
 - [ ] Run the [Windows width acceptance procedure](docs/MAP_DXCC.md#windows-width-acceptance-procedure)
   on normal and Live maps: independent fractional widths, 1.3/1.0 px reset,
   persistence, save during loading, hidden bands, multiple windows, fullscreen,
@@ -15,7 +29,7 @@
 
 ## Windows installer release verification
 
-- [ ] Verify the 0.12.3.4 installed application/file/installer versions and the
+- [ ] Verify the 0.12.3.5 installed application/file/installer versions and the
   presence of `LICENSE`, `THIRD-PARTY-NOTICES.txt`, `ThirdPartyNotices/` and
   `Assets/Leaflet/LICENSE`; check that external GeoJSON and local settings are absent.
 - [ ] Verify remaining standalone packaging variants with Inno Setup 6.7.3 and both
@@ -69,10 +83,7 @@
 
 ## v0.5 - live synchronization
 
-- [ ] Watch active UCX log files for size/content changes.
 - [ ] Fast-path appended 364-byte records.
-- [ ] Detect modified/deleted records via per-record hashes.
-- [ ] Publish newly imported/changed QSOs to UI/map clients.
 
 ## Map / presentation
 
@@ -87,14 +98,11 @@
 ## Later
 
 - [ ] Award-rule/query system.
-- [ ] Contest-aware views without excluding contest QSOs from normal statistics.
 - [ ] Optional QTC parser/importer for contest-specific statistics.
 
 
 ## Nach V0.4
 - Quellen gezielt aus Datenbank laden/filtern, nicht nur beim aktuellen Dateiimport anzeigen
-- Dateiverkleinerung/Löschen von UCX-Records synchronisieren
-- Live-Watcher für neue/geänderte Records
 - QSO-Detailansicht
 - freie read-only SQL-Abfrage nach stabilem Schema
 

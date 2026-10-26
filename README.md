@@ -4,6 +4,78 @@ UcxStats is a read-only statistics and presentation companion for UcxLog `.UCX` 
 
 It is **not** a logging program and never writes back to UcxLog files.
 
+## v0.12.3.5 Beta — Map statistics and Live QSO timeline
+
+This Beta follows public 0.12.3.4. Numeric application, assembly and installer
+versions are **0.12.3.5**; Beta is the distribution label. See the
+[release notes](docs/releases/v0.12.3.5.md) and
+[Windows packaging instructions](docs/WINDOWS_INSTALLER.md).
+
+The earlier map/timeline UI has user-reported Windows acceptance. Source deletion
+reconciliation is covered by real-file integration tests; its native Windows
+sharing/runtime checks and the final installer acceptance remain pending.
+
+Map contents, QSO statistics and **Live-Verlauf – Einstellungen** now have draggable
+⠿ headers and independent collapse controls. Positions use normalized coordinates,
+recover after resize/fullscreen/DPI changes, and persist in `map-settings.json`.
+Use **Panelpositionen zurücksetzen** to restore their anchors. Open windows retain
+independent layouts even when map center/zoom synchronization is enabled.
+
+Live Map replaces the embedded activity card with a shallow, full-width QSO
+histogram above the existing status line. It shows the rolling UTC QSO count,
+last-QSO information and a one-second gap timer. Drag its upper edge to choose a
+20–320 px height, or focus that edge and use Up/Down (10 px; Shift: 1 px). The saved
+preference survives temporary small-window clamping; double-click restores the
+existing responsive default. Heights 20–39 px show only the histogram; 40–99 px
+add minimal time labels; 100–320 px show full details. Settings remain available
+through Karteninhalt or F2 on the resize strip. Timeline visibility is controlled
+only by Karteninhalt's **Live-QSO-Verlauf** checkbox. Teal bars show QSOs; restrained
+amber regions show QSO gaps, with a dashed current gap. Gaps do not establish
+operator inactivity or actual operating pauses.
+
+Separate timeline settings offer a 15–240 minute slider (default 60), optional
+±3-minute hour snapping with smooth escape, 1/2/5/10-minute UTC buckets (default 5),
+and fixed live warning/prolonged sliders (1–179 / 2–180 minutes; defaults 10/15)
+that maintain valid ordering even when dragging outside the window. The contest pause
+control is also a slider; its calculations remain unchanged. Re-bucketing handles
+partial edges exactly, including duplicate timestamps. Bounded second-count data
+uses the existing Live scope/watcher; the timer never queries SQLite. Settings and
+Live updates preserve map geometry, view and styles. See the [map guide](docs/MAP_STATISTICS.md)
+for precise semantics, clock limits, configuration and Windows acceptance checks.
+
+### Optional map statistics
+
+Enable **QSO-Statistik** in the existing Leaflet **Karteninhalt** control for a
+collapsible summary and band table. Counts use the map's exact SQLite QSO scope:
+all/source/selected/SQL/Live maps include locator-less QSOs in totals, while
+**kartierbar** counts only QSOs eligible for actual markers. DXCCs, valid Maidenhead
+fields and four-character grids use distinct unions across selected bands; zero
+selected bands means no bands. ODX uses each QSO's effective station-profile cache.
+
+The normally hidden **Contestzeit anzeigen** option estimates time from sorted UTC
+QSO timestamps. Gaps strictly greater than a configurable 60-minute default count
+entirely as pauses; visible bands do not change contest totals. An optional minute
+allowance shows remaining/exceeded estimated time. These are QSO-derived estimates,
+not measured transmission time or contest-rule compliance.
+
+Live Map includes a one-second QSO-gap timer in its timeline footer, independent of file events,
+with configurable 10/15-minute warning thresholds. It describes gaps between logged
+QSOs and labels the **band of the last QSO**, without inferring current radio band
+or operator inactivity. Statistics update in place without HTML/GeoJSON reloads.
+Preferences persist alongside existing path widths in `map-settings.json`.
+See [map statistics, semantics, configuration and Windows checks](docs/MAP_STATISTICS.md).
+The threshold-overflow fix keeps the wider configuration range supported, with
+explicit handling of older saved values. All general map preferences remain in
+`map-settings.json`; DXCC configuration remains separate in `map-dxcc.json`.
+
+### Safe UCX source synchronization
+
+Manual and Live imports now reconcile complete source snapshots, including
+shortened and genuinely empty files. Updates/deletions, source counts and geo
+caches commit atomically; failed or changing reads retain the previous database
+snapshot. Other sources, profiles and settings remain intact. Latest-QSO activity
+and timeline counts follow the remaining QSOs. See [snapshot safety and limits](docs/DATABASE.md#complete-ucx-source-snapshots-01235).
+
 ## v0.5.2
 
 - Direct parser for the reverse-engineered 364-byte UCX record format.

@@ -1,5 +1,84 @@
 # Done
 
+## v0.12.3.5 Beta — Map statistics and Live QSO timeline (2026-10-26)
+
+The milestone includes transactional source deletion reconciliation; see the fix
+record below and [Beta release notes](docs/releases/v0.12.3.5.md). Final Beta
+verification/artifacts are recorded with those notes. Git tag and GitHub Release
+creation remain manual user steps; Windows-only acceptance checks remain in TODO.
+
+- [x] Implement exact-scope statistics for all/source/selected/SQL/Live maps,
+  including locator-less QSOs, shared marker eligibility, numeric DXCC identity,
+  valid Maidenhead fields/grids, exact band unions and profile-aware cached ODX.
+- [x] Add optional full-scope UTC contest-time estimates, strict configurable pause
+  threshold, optional allowance and clear limits on inferring actual operating time.
+- [x] Add the rolling Live histogram, 15–240-minute duration, optional hour snapping,
+  exact 1/2/5/10-minute UTC buckets, proportional bars, restrained QSO-gap bands,
+  latest-QSO details and independent one-second timer. Reuse the existing scope,
+  watcher and in-place refresh for additions/corrections and smaller snapshots.
+  The new transactional importer now reconciles actual source deletions as well.
+- [x] Add independent draggable/collapsible panels and persisted normalized positions,
+  with offscreen recovery, reset, keyboard access and independent window layouts.
+- [x] Add 20–320 px timeline resizing, saved preferred height with temporary viewport
+  clamping, miniature 20–39 / compact 40–99 / full 100–320 presentation, keyboard
+  steps/Home/End/default reset, and F2 access to the separate settings panel.
+- [x] Keep one timeline visibility control and remove the redundant inline settings
+  button. Preserve DXCC, path widths, view synchronization and map geometry.
+- [x] Fix the live threshold range-growth loop. Use fixed UI bounds 1–179 / 2–180,
+  strict ordering, bounded pointer conversion/capture lifecycle and validated saves;
+  safely retain existing wider configurations until an explicit edit.
+- [x] Persist general preferences atomically in `map-settings.json`, preserve unknown
+  settings and widths, and keep external DXCC configuration in `map-dxcc.json`.
+- [x] Receive user-reported acceptance of the latest Windows runtime tests, including
+  Live timeline, compact/miniature modes, dragging, height resizing and overflow fix.
+  This acceptance was supplied by the user; it was not performed on Linux.
+- [x] Define application version 0.12.3.5 centrally and prepare
+  [pre-release notes](docs/releases/v0.12.3.5.md). No tag or GitHub release is created.
+
+## Final 0.12.3.5 Beta preparation (2026-10-26)
+
+- [x] Review the approved statistics/timeline/UI/reconciliation milestone and keep
+  numeric version 0.12.3.5 centralized with the SDK latestPatch policy unchanged.
+- [x] Finalize Beta notes and architecture/database/map/installer documentation;
+  remove provisional release blockers and retain the native Windows follow-up.
+- [x] Pass final restore, Release build (0 warnings/errors), 431 tests plus one
+  documented native Windows skip, and the Release parser smoke executable.
+- [x] Run the default Windows publish pipeline and validate all 435 files plus the
+  final `UcxStats-Packaging-0.12.3.5-win-x64.zip` and checksum. All five product DLL
+  versions match 0.12.3.5; packaging suite passes (31 tests, 9 PowerShell skips).
+- [x] Preserve MIT/third-party notices and exclude build outputs, private data,
+  configuration, credentials and external GeoJSON from the intended source files.
+- [x] Record exact final verification/artifact details in the
+  [Beta release notes](docs/releases/v0.12.3.5.md). Git tag/GitHub Release creation
+  and native Windows installer compilation/testing remain user steps.
+
+## UCX source deletion reconciliation (2026-10-26)
+
+- [x] Replace both manual and Live upsert-only import paths with one checked,
+  per-source serialized snapshot service; retain the exact source path/index identity.
+- [x] Compare complete parser/metadata/hash reads across a settling interval and
+  revalidate before commit. Protect destructive Windows commits with a read-only
+  lease; reject missing/unreadable/partial/malformed/changing/cancelled snapshots.
+- [x] Reconcile inserts/changes/deletions, source counts, ID watermark and geo caches
+  in one transaction. Keep empty sources configured/selectable and other sources
+  untouched; never reuse deleted QSO IDs in selected/SQL scopes.
+- [x] Enable foreign keys per connection; preserve unrelated DCL evidence, profiles,
+  WAE mappings and configuration. Clear stale DCL matches only when an existing
+  record's matching fields change.
+- [x] Reuse Live watcher/refresh/contracts to remove geometry and update scoped
+  statistics/latest activity/timeline while preserving map state. Include missing
+  source notifications and avoid publishing switched/cancelled-source results.
+- [x] Add production-service/temporary-UCX/SQLite/generated-Live-page regressions,
+  rollback/failure/stale-import coverage and a native Windows sharing regression.
+- [x] Pass restore, zero-warning/error Release build, parser smoke and Release
+  tests (431 passed, 1 native-Windows skip). After tests passed, validate a separate
+  435-file `0.12.3.5-source-reconciliation-check` test bundle/ZIP and packaging suite
+  (31 tests, 9 PowerShell-related skips). No NU1900 warnings emitted; no fresh
+  successful advisory-scan claim. External dependency versions remain unchanged.
+- [x] During the reconciliation fix, preserve the uncommitted milestone and use a
+  verification-only ZIP. Final Beta preparation follows that successful fix;
+  Windows runtime acceptance of the new import safeguards remains a follow-up.
+
 ## SDK compatibility and MIT license (2026-10-23)
 
 - [x] Keep the central application/file/installer version at `0.12.3.4` for the

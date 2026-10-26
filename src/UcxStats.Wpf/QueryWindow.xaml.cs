@@ -127,12 +127,6 @@ LIMIT 500;
         if (ids.Length == 0) return;
         var scope = QsoScope.ForQsoIds(ids);
         var points = await _repository.GetMapQsoPointsAsync(scope);
-        if (points.Count == 0)
-        {
-            MessageBox.Show(this, "Die Ergebnismenge enthält keine kartierbaren QSOs.", "Karte");
-            return;
-        }
-
         new MapWindow(_repository, scope, points, $"SQL-Ergebnis · {points.Count:N0} kartierbare QSOs")
             { Owner = _mainOwner }.Show();
     }

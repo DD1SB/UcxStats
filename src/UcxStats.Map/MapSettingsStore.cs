@@ -36,7 +36,27 @@ public sealed class MapSettingsStore
         var longpath = ReadWidth(general, nameof(MapSettings.LongpathWidth));
         var settings = new MapSettings(
             shortpath ?? ReadWidth(legacy, nameof(MapSettings.ShortpathWidth)) ?? MapPathWidths.DefaultShortpathWidth,
-            longpath ?? ReadWidth(legacy, nameof(MapSettings.LongpathWidth)) ?? MapPathWidths.DefaultLongpathWidth);
+            longpath ?? ReadWidth(legacy, nameof(MapSettings.LongpathWidth)) ?? MapPathWidths.DefaultLongpathWidth,
+            ReadBool(general, nameof(MapSettings.StatisticsVisible)),
+            ReadBool(general, nameof(MapSettings.ContestTimeVisible)),
+            ReadInt(general, nameof(MapSettings.ContestPauseThresholdMinutes)) ?? 60,
+            ReadInt(general, nameof(MapSettings.OperatingTimeAllowanceMinutes)),
+            ReadInt(general, nameof(MapSettings.LiveWarningThresholdMinutes)) ?? 10,
+            ReadInt(general, nameof(MapSettings.LiveProlongedGapThresholdMinutes)) ?? 15)
+        {
+            LiveTimelineHeightPx = ReadInt(general, nameof(MapSettings.LiveTimelineHeightPx)),
+            LiveTimelineMinutes = ReadInt(general, nameof(MapSettings.LiveTimelineMinutes)) ?? 60,
+            LiveTimelineSnap = ReadBool(general, nameof(MapSettings.LiveTimelineSnap), true),
+            LiveTimelineBucketMinutes = ReadInt(general, nameof(MapSettings.LiveTimelineBucketMinutes)) ?? 5,
+            LiveTimelineVisible = ReadBool(general, nameof(MapSettings.LiveTimelineVisible), true),
+            LiveTimelineSettingsVisible = ReadBool(general, nameof(MapSettings.LiveTimelineSettingsVisible), true),
+            LiveTimelineSettingsCollapsed = ReadBool(general, nameof(MapSettings.LiveTimelineSettingsCollapsed), true),
+            ContentsPanelCollapsed = ReadBool(general, nameof(MapSettings.ContentsPanelCollapsed)),
+            StatisticsPanelCollapsed = ReadBool(general, nameof(MapSettings.StatisticsPanelCollapsed)),
+            ContentsPanelPosition = ReadPosition(general, nameof(MapSettings.ContentsPanelPosition)),
+            StatisticsPanelPosition = ReadPosition(general, nameof(MapSettings.StatisticsPanelPosition)),
+            TimelinePanelPosition = ReadPosition(general, nameof(MapSettings.TimelinePanelPosition))
+        }.Normalize();
         var legacyHasWidths = HasLegacyWidths(legacy);
         var generalComplete = shortpath.HasValue && longpath.HasValue;
 
@@ -78,15 +98,43 @@ public sealed class MapSettingsStore
         ArgumentNullException.ThrowIfNull(settings);
         // Re-read to retain unknown properties. Malformed JSON is left untouched.
         var document = AtomicJsonFile.ReadObject(Path) ?? new JsonObject();
-        SetWidths(document, settings.Normalize());
+        settings = settings.Normalize();
+        SetWidths(document, settings);
+        document[nameof(MapSettings.StatisticsVisible)] = settings.StatisticsVisible;
+        document[nameof(MapSettings.ContestTimeVisible)] = settings.ContestTimeVisible;
+        document[nameof(MapSettings.ContestPauseThresholdMinutes)] = settings.ContestPauseThresholdMinutes;
+        document[nameof(MapSettings.OperatingTimeAllowanceMinutes)] = settings.OperatingTimeAllowanceMinutes;
+        document[nameof(MapSettings.LiveWarningThresholdMinutes)] = settings.LiveWarningThresholdMinutes;
+        document[nameof(MapSettings.LiveProlongedGapThresholdMinutes)] = settings.LiveProlongedGapThresholdMinutes;
+        var serialized = JsonSerializer.SerializeToNode(settings)!;
+        foreach (var name in PresentationPropertyNames)
+            document[name] = serialized[name]?.DeepClone();
         _write(Path, document);
     }
+
+    private static readonly string[] PresentationPropertyNames =
+    [
+        nameof(MapSettings.LiveTimelineHeightPx), nameof(MapSettings.LiveTimelineMinutes), nameof(MapSettings.LiveTimelineSnap), nameof(MapSettings.LiveTimelineBucketMinutes),
+        nameof(MapSettings.LiveTimelineVisible), nameof(MapSettings.LiveTimelineSettingsVisible), nameof(MapSettings.LiveTimelineSettingsCollapsed),
+        nameof(MapSettings.ContentsPanelCollapsed), nameof(MapSettings.StatisticsPanelCollapsed),
+        nameof(MapSettings.ContentsPanelPosition), nameof(MapSettings.StatisticsPanelPosition), nameof(MapSettings.TimelinePanelPosition)
+    ];
+
+    private static MapPanelPosition? ReadPosition(JsonObject? document, string name) =>
+        document?[name] is JsonObject position && position["X"] is JsonValue x && x.TryGetValue<double>(out var xv) &&
+        position["Y"] is JsonValue y && y.TryGetValue<double>(out var yv) ? new(xv, yv) : null;
 
     private static void SetWidths(JsonObject document, MapSettings settings)
     {
         document[nameof(MapSettings.ShortpathWidth)] = settings.ShortpathWidth;
         document[nameof(MapSettings.LongpathWidth)] = settings.LongpathWidth;
     }
+
+    private static bool ReadBool(JsonObject? document, string name, bool fallback = false) =>
+        document?[name] is JsonValue node && node.TryGetValue<bool>(out var value) ? value : fallback;
+
+    private static int? ReadInt(JsonObject? document, string name) =>
+        document?[name] is JsonValue node && node.TryGetValue<int>(out var value) ? value : null;
 
     private static bool HasLegacyWidths(JsonObject? document) => document is not null &&
         (document.ContainsKey(nameof(MapSettings.ShortpathWidth)) || document.ContainsKey(nameof(MapSettings.LongpathWidth)));

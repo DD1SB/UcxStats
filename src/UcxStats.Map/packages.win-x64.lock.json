@@ -54,8 +54,12 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.11, )",
-          "UcxStats.Core": "[0.12.3.3, )"
+          "UcxStats.Core": "[0.12.3.5, )",
+          "UcxStats.Geo": "[0.12.3.5, )"
         }
+      },
+      "ucxstats.geo": {
+        "type": "Project"
       }
     },
     "net10.0/win-x64": {

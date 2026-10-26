@@ -120,6 +120,7 @@ public partial class LiveMapWindow : Window
         };
         _watcher.Changed += Watcher_Changed;
         _watcher.Created += Watcher_Changed;
+        _watcher.Deleted += Watcher_Changed;
         _watcher.Renamed += Watcher_Renamed;
     }
 
@@ -167,40 +168,45 @@ public partial class LiveMapWindow : Window
                 _refreshCancellation?.Dispose();
                 _refreshCancellation = new CancellationTokenSource();
                 var token = _refreshCancellation.Token;
+                var source = _activeSource;
+                var fromUtc = _fromUtc;
+                if (source is null) return;
 
-                StatusText.Text = $"Synchronisiere {Path.GetFileName(_activeSource.FullPath)} …";
+                StatusText.Text = $"Synchronisiere {Path.GetFileName(source.FullPath)} …";
 
                 (QsoImportResult Result, int RecordCount) sync;
                 try
                 {
-                    sync = await _importService.SyncFileAsync(_activeSource.FullPath, token);
+                    sync = await _importService.SyncFileAsync(source.FullPath, token);
                 }
                 catch (IOException)
                 {
                     // UcxLog may still be replacing/writing the file. One delayed retry is sufficient.
                     await Task.Delay(500, token);
-                    sync = await _importService.SyncFileAsync(_activeSource.FullPath, token);
+                    sync = await _importService.SyncFileAsync(source.FullPath, token);
                 }
 
-                var scope = QsoScope.ForSources([_activeSource.FullPath]).WithFromUtc(_fromUtc);
+                if (token.IsCancellationRequested || _activeSource != source || _fromUtc != fromUtc) return;
+                var scope = QsoScope.ForSources([source.FullPath]).WithFromUtc(fromUtc);
                 var points = await _repository.GetMapQsoPointsAsync(scope, token);
 
+                if (token.IsCancellationRequested || _activeSource != source || _fromUtc != fromUtc) return;
                 if (initial || _mapWindow is null || !_mapWindow.IsLoaded)
                 {
-                    var title = $"LIVE · {_activeSource.FileName} · ab {_fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
-                    _mapWindow = new MapWindow(_repository, scope, points, title, _mapSettings) { Owner = _mainOwner };
+                    var title = $"LIVE · {source.FileName} · ab {fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
+                    _mapWindow = new MapWindow(_repository, scope, points, title, _mapSettings, isLiveMap: true) { Owner = _mainOwner };
                     _mapWindow.Closed += (_, _) => _mapWindow = null;
                     _mapWindow.Show();
                 }
                 else
                 {
-                    var title = $"LIVE · {_activeSource.FileName} · ab {_fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
+                    var title = $"LIVE · {source.FileName} · ab {fromUtc:dd.MM.yyyy HH:mm} UTC · {points.Count:N0} QSOs";
                     await _mapWindow.UpdateLiveDataAsync(points, title, scope);
                 }
 
                 StatusText.Text =
-                    $"{points.Count:N0} QSOs seit {_fromUtc:dd.MM.yyyy HH:mm} UTC · " +
-                    $"Sync: +{sync.Result.Inserted:N0} / Δ{sync.Result.Updated:N0} / ={sync.Result.Unchanged:N0} · " +
+                    $"{points.Count:N0} QSOs seit {fromUtc:dd.MM.yyyy HH:mm} UTC · " +
+                    $"Sync: +{sync.Result.Inserted:N0} / Δ{sync.Result.Updated:N0} / ={sync.Result.Unchanged:N0} / −{sync.Result.Deleted:N0} · " +
                     $"zuletzt {DateTime.UtcNow:HH:mm:ss} UTC";
             }
             while (_refreshPending);
@@ -215,6 +221,7 @@ public partial class LiveMapWindow : Window
         finally
         {
             _refreshRunning = false;
+            if (_refreshPending && _activeSource is not null) await RefreshLiveAsync(initial: false);
         }
     }
 
@@ -234,6 +241,7 @@ public partial class LiveMapWindow : Window
         if (closeMap)
             _mapWindow?.Close();
 
+        _refreshPending = false;
         _activeSource = null;
         ResetControls();
     }

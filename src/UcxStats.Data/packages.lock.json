@@ -50,6 +50,9 @@
       },
       "ucxstats.core": {
         "type": "Project"
+      },
+      "ucxstats.geo": {
+        "type": "Project"
       }
     }
   }

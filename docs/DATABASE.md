@@ -1,4 +1,7 @@
-# SQLite persistence (v0.3)
+# SQLite persistence
+
+The 0.12.3.5 Beta milestone is described in the [release notes](releases/v0.12.3.5.md).
+Numeric versions remain centrally defined; Beta does not add a second version source.
 
 UcxStats uses `Microsoft.Data.Sqlite` directly, without Entity Framework.
 
@@ -24,11 +27,13 @@ When a valid locator is present, v0.3 persists:
 - `grid4`
 - `grid6`
 
-Distance, bearing and short/long-path geometry are intentionally deferred until the station/home locator becomes configurable.
+Distance and initial bearing use the effective station profile and are cached in
+`qso_geo_cache` by QSO/profile. Map geometry uses the established geo/map services.
 
 ## Query safety
 
-Future free-form user queries must be read-only. The planned expert query surface will only accept/read through `SELECT`/`WITH` statements and will not expose UCX files to SQL at all.
+Expert queries use the existing read-only `SELECT`/`WITH` surface and never expose
+UCX files to SQL writes.
 
 ### Geo columns
 `locator`, `latitude`, `longitude`, `grid2`, `grid4`, `grid6`, and `grid8` are stored with each QSO. Latitude/longitude use the center of the full available 2/4/6/8-character Maidenhead locator. Existing databases are migrated automatically to add `grid8`.
@@ -60,3 +65,54 @@ DxccIdentityAuditResult audit = await repository.GetDxccIdentityAuditAsync();
 `IQsoRepository.GetDxccStatusAsync(QsoScope)` aggregates all in-scope QSOs by effective entity and band. It does not join locator columns, so QSOs without a usable locator count. The aggregate exposes QSO count, eQSL/ClubLog count, and paper/LoTW count; DCL does not contribute to the latter two counts.
 
 Map marker retrieval also accepts the same typed `QsoScope`. This keeps source, explicit-QSO-ID, source-record, and UTC-lower-bound selection consistent between marker/path data and DXCC status while deliberately retaining the marker query's locator/station-coordinate requirements. No polygon or calculated overlay state is persisted in SQLite.
+
+## Complete UCX source snapshots (0.12.3.5)
+
+Manual and Live imports use the same `UcxImportService`. `ReconcileSourceAsync`
+accepts one absolute source path and a fully parsed, ordered snapshot containing
+exactly the zero-based record indices 0 through count − 1. The path/index remains
+QSO identity; callsign/time are never deletion keys. Empty is an explicit snapshot
+of that path. `UpsertManyAsync` remains a non-destructive incremental API.
+
+Reconciliation holds one immediate SQLite writer transaction:
+
+1. Compare record hashes and reuse the existing upsert for inserted/changed rows.
+   Unchanged rows retain IDs, confirmations and per-QSO profile overrides.
+2. Reserve the maximum allocated QSO ID in `ucxstats_metadata` under
+   `qso_id_high_watermark`, then delete rows only for this path whose indices are
+   outside the completed snapshot. New inserts respect that watermark: deleted
+   IDs are not reused by later snapshot or incremental imports, so selected/SQL
+   ID scopes cannot silently switch to another QSO. Existing IDs are unchanged;
+   no table rebuild is needed for older databases without AUTOINCREMENT.
+3. Update the source count/import timestamp without overwriting its profile or
+   removing its configuration. Empty sources remain listed with zero QSOs.
+4. Refill missing effective-profile geo cache entries using the existing distance
+   and bearing calculation, within the same transaction.
+5. Revalidate the source, check cancellation and commit. An exception rolls back
+   upserts, deletions, caches, watermark and source metadata together.
+
+Every repository connection enables foreign keys. `qso_geo_cache.qso_id` cascades
+on deletion, including caches for alternate profiles. DCL confirmation/status,
+DXCC and ADIF2 values are QSO columns, not separate orphanable matching rows.
+They disappear with an intentionally deleted QSO. Unchanged or locator/remarks/
+status-only edits retain DCL evidence. If callsign/date/start time/band/mode changes
+at an existing index, that row's prior DCL match is cleared before upsert; reimport
+DCL to rematch the edited QSO. Other QSOs' DCL data, WAE mapping resources, station
+profiles and source configuration are not cleared.
+
+The importer verifies two identical complete reads 250 ms apart, including file
+length, creation/write timestamps and ordered raw-record hashes, and rechecks
+while holding the database writer transaction immediately before commit. Missing,
+locked, unreadable, malformed, partial or changing files fail without deleting
+previous data. For a destructive commit it holds a read-only `FileShare.Read`
+lease through final verification/commit; An already open Windows writer prevents acquiring the lease; once acquired,
+new write/delete opens are excluded until it is released. A missing-file watcher notification never
+means an empty source. A stable, readable zero-byte file is a valid empty snapshot.
+
+Imports serialize before reading per database/source across service instances.
+Final file validation under the writer transaction rejects older snapshots if the
+source changed while waiting, including after another database writer committed.
+A cancelled/failed import releases its gate, so later events can retry normally.
+UCX supplies no application-level commit marker: a closed writer that leaves a
+valid shorter/empty file stable is indistinguishable from an intentional edit.
+Windows sharing behavior requires native acceptance; Unix file sharing is weaker.

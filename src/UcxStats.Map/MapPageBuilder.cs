@@ -22,7 +22,9 @@ public static class MapPageBuilder
         IReadOnlyList<MapQsoPoint> points,
         MapTileDefinition tileSettings,
         MapDxccPageOptions dxcc,
-        MapPathWidths? pathWidths = null)
+        MapPathWidths? pathWidths = null,
+        MapSettings? statisticsSettings = null,
+        bool isLiveMap = false)
     {
         ArgumentNullException.ThrowIfNull(points);
         ArgumentNullException.ThrowIfNull(tileSettings);
@@ -54,10 +56,17 @@ html,body,#map{height:100%;margin:0}body{font-family:Segoe UI,Arial,sans-serif}.
 .ucx-dxcc-legend-row{white-space:nowrap;margin:3px 0}.ucx-dxcc-legend-sample{display:inline-block;width:25px;height:10px;margin-right:6px;vertical-align:middle;border-width:2px;background-clip:padding-box}
 .dxcc-unknown{background:#8b8f94;border-color:#666;border-style:dashed;opacity:.6}.dxcc-notworked{background:#d73027;border-color:#9f1e17;border-style:dotted}.dxcc-worked{background:#f4c542;border-color:#8a6d00;border-style:dashed}.dxcc-other{background:#70c5e8;border-color:#247da0;border-style:double}.dxcc-credited{background:#3aa657;border-color:#166c2f;border-style:solid}
 .ucx-dxcc-popup-title{font-weight:700;font-size:14px}.ucx-dxcc-popup-meta{color:#555;margin-bottom:7px}.ucx-dxcc-popup-section{margin-top:5px}
+{{{MapStatisticsPanel.Styles}}}
+{{{MapPanelLayout.Styles}}}
+{{{LiveTimelinePanel.Styles}}}
 </style>
 </head><body><div id="map"></div>
+{{{(isLiveMap ? LiveTimelinePanel.BuildHtml((statisticsSettings ?? new MapSettings()).LiveTimelineVisible, statisticsSettings?.Normalize().LiveTimelineHeightPx) : string.Empty)}}}
 <script src="leaflet/leaflet.js"></script>
 <script>
+const initialStatisticsSettings={{{MapStatisticsPayload.SerializeSettings(statisticsSettings ?? new MapSettings())}}};
+const liveThresholdUiLimits={{{LiveThresholdUi.SerializeLimits()}}};
+const isLiveMap={{{(isLiveMap ? "true" : "false")}}};
 const qsos={{{qsoJson}}};
 const initialDxccStatus={{{dxccStatusJson}}};
 const dxccConfig={geometryAvailable:{{{geometryAvailableJson}}},enabledByDefault:{{{enabledByDefaultJson}}},url:{{{dxccUrlJson}}},diagnostic:{{{dxccDiagnosticJson}}}};
@@ -263,20 +272,29 @@ async function initializeDxccGeometry(){
  }catch(error){showDxcc=false;dxccGeometryReady=false;if(dxccControlCheckbox){dxccControlCheckbox.checked=false;dxccControlCheckbox.disabled=true;dxccControlCheckbox.closest('label')?.classList.add('ucx-disabled')}updateDxccLegend();try{window.chrome.webview.postMessage({type:'dxccError',phase:'initialize',message:String(error)});}catch{}}
 }
 
+{{{MapPanelLayout.Script}}}
+{{{MapStatisticsPanel.Script}}}
+{{{LiveTimelinePanel.Script}}}
+
 function renderBandControls(){
  if(!bandControlHost)return;bandControlHost.innerHTML=[...bandLayers.values()].map(b=>`<label><input class="ctl-band" data-band-code="${b.code}" type="checkbox" ${b.enabled?'checked':''}><span class="ucx-swatch" style="background:${b.color}"></span>${esc(b.display)}</label>`).join('');
- bandControlHost.querySelectorAll('.ctl-band').forEach(cb=>cb.addEventListener('change',e=>{const b=bandLayers.get(String(e.target.dataset.bandCode));if(b){b.enabled=e.target.checked;refreshBand(b.code);window.ucxRefreshDxccStyles()}}));
+ bandControlHost.querySelectorAll('.ctl-band').forEach(cb=>cb.addEventListener('change',e=>{const b=bandLayers.get(String(e.target.dataset.bandCode));if(b){b.enabled=e.target.checked;refreshBand(b.code);window.ucxRefreshDxccStyles();renderStatistics()}}));
 }
 const UcxControl=L.Control.extend({onAdd:function(){
  const div=L.DomUtil.create('div','ucx-control');L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);
  const dxccDisabled=dxccConfig.geometryAvailable?'':' disabled',dxccClass=dxccConfig.geometryAvailable?'':' class="ucx-disabled"',dxccTitle=esc(dxccConfig.diagnostic??'');
- div.innerHTML='<div class="ucx-title">Karteninhalt</div>'+'<label><input id="ctl-qso" type="checkbox" checked> QSOs</label>'+'<label><input id="ctl-path" type="checkbox" checked> Shortpath</label>'+'<label><input id="ctl-long" type="checkbox"> Longpath</label>'+'<label><input id="ctl-station" type="checkbox" checked> Stations-QTH</label>'+'<label><input id="ctl-night" type="checkbox"> Tag/Nacht</label>'+`<label${dxccClass} title="${dxccTitle}"><input id="ctl-dxcc" type="checkbox"${dxccDisabled}${showDxcc?' checked':''}> DXCC status</label>`+'<div class="ucx-dxcc-note">'+esc(dxccConfig.diagnostic??'')+'</div><hr><div class="ucx-title">Bänder</div><div id="ucx-band-controls"></div>';
+ div.innerHTML='<div class="ucx-title">Karteninhalt</div>'+'<label><input id="ctl-qso" type="checkbox" checked> QSOs</label>'+'<label><input id="ctl-path" type="checkbox" checked> Shortpath</label>'+'<label><input id="ctl-long" type="checkbox"> Longpath</label>'+'<label><input id="ctl-station" type="checkbox" checked> Stations-QTH</label>'+'<label><input id="ctl-night" type="checkbox"> Tag/Nacht</label>'+`<label${dxccClass} title="${dxccTitle}"><input id="ctl-dxcc" type="checkbox"${dxccDisabled}${showDxcc?' checked':''}> DXCC status</label>`+'<div class="ucx-dxcc-note">'+esc(dxccConfig.diagnostic??'')+'</div><label><input id="ctl-statistics" type="checkbox"> QSO-Statistik</label><hr><div class="ucx-title">Bänder</div><div id="ucx-band-controls"></div>';
+ div.innerHTML=mapPanelMarkup('Karteninhalt',div.innerHTML.replace('<div class="ucx-title">Karteninhalt</div>','')+(isLiveMap?'<hr><label><input id="ctl-timeline" type="checkbox"> Live-QSO-Verlauf</label><label><input id="ctl-timeline-settings" type="checkbox"> Verlauf-Einstellungen</label>':'')+'<hr><button type="button" id="ctl-reset-panels">Panelpositionen zurücksetzen</button>');
+ div.querySelector('#ctl-reset-panels').addEventListener('click',()=>window.ucxResetPanelPositions());
+ if(isLiveMap){timelineVisibilityCheckbox=div.querySelector('#ctl-timeline');timelineSettingsCheckbox=div.querySelector('#ctl-timeline-settings');timelineVisibilityCheckbox.addEventListener('change',e=>setTimelinePresentation('liveTimelineVisible',e.target.checked));timelineSettingsCheckbox.addEventListener('change',e=>setTimelinePresentation('liveTimelineSettingsVisible',e.target.checked))}
+ statisticsCheckbox=div.querySelector('#ctl-statistics');statisticsCheckbox.checked=statisticsSettings.statisticsVisible;statisticsCheckbox.addEventListener('change',e=>{window.ucxSetStatisticsVisible(e.target.checked);try{window.chrome.webview.postMessage({type:'statisticsVisibility',visible:e.target.checked})}catch{}});
  bandControlHost=div.querySelector('#ucx-band-controls');dxccControlCheckbox=div.querySelector('#ctl-dxcc');renderBandControls();
  setTimeout(()=>{
   div.querySelector('#ctl-qso').addEventListener('change',e=>{showQsos=e.target.checked;refreshAll()});div.querySelector('#ctl-path').addEventListener('change',e=>{showPaths=e.target.checked;refreshAll()});div.querySelector('#ctl-long').addEventListener('change',e=>{showLong=e.target.checked;refreshAll()});div.querySelector('#ctl-station').addEventListener('change',e=>{showStations=e.target.checked;refreshAll()});div.querySelector('#ctl-night').addEventListener('change',e=>{showNight=e.target.checked;refreshAll()});dxccControlCheckbox.addEventListener('change',e=>window.ucxSetDxccVisible(e.target.checked));
  },0);return div;
 }});
-map.addControl(new UcxControl({position:'topright'}));
+const contentsControl=new UcxControl({position:'topright'});map.addControl(contentsControl);registerMapPanel('contents',contentsControl.getContainer());
+initializeLiveTimeline();window.ucxSetStatisticsSettings(initialStatisticsSettings);
 initializeDxccGeometry();
 function postView(){if(suppressViewMessage)return;const c=map.getCenter();if(window.chrome?.webview)window.chrome.webview.postMessage({type:'view',lat:c.lat,lon:c.lng,zoom:map.getZoom()});}
 map.on('moveend',postView);

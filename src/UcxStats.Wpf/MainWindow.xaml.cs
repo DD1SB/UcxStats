@@ -6,7 +6,6 @@ using System.Windows;
 using Microsoft.Win32;
 using UcxStats.Core.Ucx;
 using UcxStats.Data.Database;
-using UcxStats.Geo.Maidenhead;
 using UcxStats.Map;
 
 namespace UcxStats.Wpf;
@@ -61,45 +60,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var totalInserted = 0;
             var totalUpdated = 0;
             var totalUnchanged = 0;
+            var totalDeleted = 0;
             var totalQsos = 0;
             var totalRecordsWithWarnings = 0;
 
             foreach (var fileName in dialog.FileNames)
             {
-                var reader = new UcxFileReader();
-                var sourceRecords = reader.ReadWithMetadata(fileName).ToList();
-                var importRecords = new List<QsoImportRecord>(sourceRecords.Count);
                 var sourcePath = Path.GetFullPath(fileName);
+                var snapshot = await new UcxImportService(_repository).SyncSnapshotAsync(sourcePath);
                 var fileDiagnostics = new List<UcxDiagnostic>();
-
-                foreach (var source in sourceRecords)
+                foreach (var source in snapshot.Records)
                 {
                     var qso = source.Qso;
                     Qsos.Add(new QsoGridRow(sourcePath, qso));
                     var qsoDiagnostics = _validator.Validate(qso);
                     allDiagnostics.AddRange(qsoDiagnostics);
                     fileDiagnostics.AddRange(qsoDiagnostics);
-                    BuildGeo(qso, out var latitude, out var longitude, out var grid2, out var grid4, out var grid6, out var grid8);
-                    importRecords.Add(new QsoImportRecord
-                    {
-                        SourceFile = sourcePath,
-                        SourceRecordIndex = qso.RecordIndex,
-                        SourceRecordHash = source.RecordHash,
-                        Qso = qso,
-                        Latitude = latitude,
-                        Longitude = longitude,
-                        Grid2 = grid2,
-                        Grid4 = grid4,
-                        Grid6 = grid6,
-                        Grid8 = grid8
-                    });
                 }
-
-                var result = await _repository.UpsertManyAsync(importRecords);
+                var result = snapshot.Result;
                 totalInserted += result.Inserted;
                 totalUpdated += result.Updated;
                 totalUnchanged += result.Unchanged;
-                totalQsos += sourceRecords.Count;
+                totalDeleted += result.Deleted;
+                totalQsos += snapshot.Records.Count;
                 totalRecordsWithWarnings += fileDiagnostics.Select(x => x.RecordIndex).Distinct().Count();
             }
 
@@ -114,7 +97,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var ok = Math.Max(0, totalQsos - totalRecordsWithWarnings);
             StatusText =
                 $"{totalQsos:N0} QSOs | {ok:N0} ohne Warnung | {allDiagnostics.Count:N0} Hinweise | " +
-                $"DB: +{totalInserted:N0} / Δ{totalUpdated:N0} / ={totalUnchanged:N0}";
+                $"DB: +{totalInserted:N0} / Δ{totalUpdated:N0} / ={totalUnchanged:N0} / −{totalDeleted:N0}";
         }
         catch (Exception ex)
         {
@@ -125,25 +108,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             IsEnabled = true;
         }
-    }
-
-    private static void BuildGeo(UcxQsoRecord qso, out double? latitude, out double? longitude, out string? grid2, out string? grid4, out string? grid6, out string? grid8)
-    {
-        latitude = longitude = null;
-        grid2 = grid4 = grid6 = grid8 = null;
-        if (string.IsNullOrWhiteSpace(qso.Locator)) return;
-        try
-        {
-            var locator = qso.Locator.Trim().ToUpperInvariant();
-            var coordinate = MaidenheadConverter.ToCenter(locator);
-            latitude = coordinate.Latitude;
-            longitude = coordinate.Longitude;
-            if (locator.Length >= 2) grid2 = locator[..2];
-            if (locator.Length >= 4) grid4 = locator[..4];
-            if (locator.Length >= 6) grid6 = locator[..6];
-            if (locator.Length >= 8) grid8 = locator[..8];
-        }
-        catch (ArgumentException) { }
     }
 
     private async Task RefreshDatabaseSummaryAsync()
@@ -339,13 +303,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 : "Kartendaten werden aus der Datenbank geladen…";
             var selection = await GetGeoSelectionAsync();
             var points = selection.Points;
-            if (points.Count == 0)
-            {
-                MessageBox.Show(this, "Keine kartierbaren QSOs. Benötigt werden Locator und ein zugeordnetes Stationsprofil.",
-                    "UcxStats Karte", MessageBoxButton.OK, MessageBoxImage.Information);
-                StatusText = "Keine kartierbaren QSOs für die Auswahl.";
-                return;
-            }
             var title = selection.Title;
             if (SingleMapWindowCheck.IsChecked == true && _singleMapWindow is { IsLoaded: true })
             {

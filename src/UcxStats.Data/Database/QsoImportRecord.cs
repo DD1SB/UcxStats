@@ -16,4 +16,7 @@ public sealed record QsoImportRecord
     public string? Grid8 { get; init; }
 }
 
-public sealed record QsoImportResult(int Inserted, int Updated, int Unchanged);
+public sealed record QsoImportResult(int Inserted, int Updated, int Unchanged)
+{
+    public int Deleted { get; init; }
+}

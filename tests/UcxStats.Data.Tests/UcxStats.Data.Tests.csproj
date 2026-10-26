@@ -22,9 +22,15 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- Exercise the actual host import service on Linux without loading WPF. -->
+    <Compile Include="..\..\src\UcxStats.Wpf\UcxImportService.cs" Link="Import\UcxImportService.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures\ucx-mapping-v2-baseline.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\map-ui-refinement.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\map-runtime.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\map-statistics.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\map-source-reconciliation.cjs" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\map-path-widths.cjs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

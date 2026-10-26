@@ -1,82 +1,9 @@
 'use strict';
-// Run the generated page with observable Leaflet/DOM doubles. No browser or CDN.
-const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const fs = require('node:fs');
-const { html, updateScript } = JSON.parse(fs.readFileSync(0, 'utf8'));
-const scenario = process.argv[2];
-
-class Element {
-    constructor() { this.style = {}; this.children = new Map(); this.listeners = new Map(); }
-    querySelector(selector) {
-        if (!this.children.has(selector)) this.children.set(selector, new Element());
-        return this.children.get(selector);
-    }
-    querySelectorAll() { return []; }
-    addEventListener(name, handler) { this.listeners.set(name, handler); }
-}
-class Layer {
-    constructor(kind, options = {}) { this.kind = kind; this.options = { ...options }; this.styleCalls = 0; }
-    addTo(target) { target.addLayer(this); return this; }
-    bindPopup(content) { this.popup = content; return this; }
-    setStyle(style) { Object.assign(this.options, style); this.styleCalls++; return this; }
-}
-class Group extends Layer {
-    constructor() { super('group'); this.layers = new Set(); }
-    addLayer(layer) { this.layers.add(layer); return this; }
-    eachLayer(callback) { this.layers.forEach(callback); return this; }
-    clearLayers() { this.layers.clear(); return this; }
-}
-class MapDouble extends Group {
-    constructor() { super(); this.panes = new Map(); this.events = new Map(); this.viewCalls = 0; this.fitCalls = 0; }
-    createPane(name) { this.panes.set(name, new Element()); }
-    getPane(name) { return this.panes.get(name); }
-    setView(center, zoom) { this.center = center; this.zoom = zoom; this.viewCalls++; return this; }
-    fitBounds() { this.fitCalls++; return this; }
-    hasLayer(layer) { return this.layers.has(layer); }
-    removeLayer(layer) { this.layers.delete(layer); return this; }
-    on(name, handler) { this.events.set(name, handler); return this; }
-    addControl(control) { control.addTo(this); }
-}
-const L = {
-    map: () => new MapDouble(),
-    canvas: options => ({ ...options }),
-    tileLayer: (_url, options) => Object.assign(new Layer('tiles', options), { on() { return this; } }),
-    layerGroup: () => new Group(),
-    circleMarker: (_coords, options) => new Layer('marker', options),
-    polyline: (_coords, options) => new Layer('path', options),
-    polygon: (_coords, options) => new Layer('polygon', options),
-    geoJSON: (geoJson, options) => {
-        const group = new Group();
-        for (const feature of geoJson.features) {
-            const layer = new Layer('dxcc', options.style(feature));
-            layer.feature = feature;
-            options.onEachFeature(feature, layer);
-            group.addLayer(layer);
-        }
-        return group;
-    },
-    Control: { extend: definition => class {
-        addTo(map) { this.container = definition.onAdd.call(this, map); return this; }
-        getContainer() { return this.container; }
-    } },
-    DomUtil: { create: () => new Element() },
-    DomEvent: { disableClickPropagation() {}, disableScrollPropagation() {} }
-};
-const sandbox = vm.createContext({
-    L, assert, updateScript, scenario, console, performance,
-    window: {
-        chrome: { webview: { postMessage() {} } },
-        location: { reload() { assert.fail('Page reload'); } }
-    },
-    setTimeout: fn => fn(), setInterval() {},
-    fetch: async () => ({ ok: true, json: async () => ({
-        features: [{ properties: { entityId: 281, catalogStatus: 'Current' } }]
-    }) })
-});
-const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
-vm.runInContext(script, sandbox, { timeout: 5000 });
-
+const fs=require('node:fs');
+const vm=require('node:vm');
+const scenario=process.argv[2];
+const data=JSON.parse(fs.readFileSync(0,'utf8'));
+const {sandbox}=require('./map-runtime.cjs').createRuntime(data,{scenario:process.argv[2]});
 // Allow the asynchronous DXCC fetch to finish before taking the baseline snapshot.
 setImmediate(() => {
     vm.runInContext(`

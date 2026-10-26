@@ -55,7 +55,9 @@ public sealed class MapPathWidthTests
             using var json = JsonDocument.Parse(File.ReadAllText(path));
             Assert.Equal(shortpath, json.RootElement.GetProperty("ShortpathWidth").GetDouble());
             Assert.Equal(longpath, json.RootElement.GetProperty("LongpathWidth").GetDouble());
-            Assert.Equal(2, json.RootElement.EnumerateObject().Count());
+            Assert.False(json.RootElement.TryGetProperty("GeoJsonPath", out _));
+            Assert.False(json.RootElement.TryGetProperty("EnabledByDefault", out _));
+            Assert.False(json.RootElement.GetProperty("StatisticsVisible").GetBoolean());
         });
     }
 

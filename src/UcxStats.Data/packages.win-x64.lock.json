@@ -50,6 +50,9 @@
       },
       "ucxstats.core": {
         "type": "Project"
+      },
+      "ucxstats.geo": {
+        "type": "Project"
       }
     },
     "net10.0/win-x64": {

@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
-    <!-- Existing application baseline (MainWindow/README); the installer reads this source. -->
-    <Version>0.12.3.4</Version>
+    <!-- Single application version; assemblies, publish metadata and installer derive from this source. -->
+    <Version>0.12.3.5</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

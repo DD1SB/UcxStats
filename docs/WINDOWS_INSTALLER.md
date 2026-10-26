@@ -16,6 +16,40 @@ as a normal user. Pop!_OS publishes the self-contained .NET 10 WPF payload.
 Windows 10 22H2 (build 19045) or later, on an x64 OS, is required by this installer.
 ARM64 and x86 are not installer targets.
 
+
+## 0.12.3.5 Beta transfer package
+
+The final Linux-generated transfer files are
+`artifacts/UcxStats-Packaging-0.12.3.5-win-x64.zip` and its `.sha256` sidecar;
+the validated staging directory is `artifacts/packaging/win-x64/0.12.3.5/`.
+Beta is a distribution label; numeric assembly/product/manifest/Inno and Windows
+Installed Apps versions remain **0.12.3.5** from `Directory.Build.props`.
+See [Beta release notes](releases/v0.12.3.5.md) for scope, checks and limitations.
+
+With Inno Setup **6.7.3** installed, copy the ZIP/checksum to Windows and use a new,
+writable extraction directory. For example, from `C:\Build`:
+
+```powershell
+Get-FileHash '.\UcxStats-Packaging-0.12.3.5-win-x64.zip' -Algorithm SHA256
+Get-Content '.\UcxStats-Packaging-0.12.3.5-win-x64.zip.sha256'
+Expand-Archive '.\UcxStats-Packaging-0.12.3.5-win-x64.zip' -DestinationPath 'C:\Build\UcxStats-0.12.3.5-Beta'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Build\UcxStats-0.12.3.5-Beta\package.ps1' -ValidateOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Build\UcxStats-0.12.3.5-Beta\package.ps1'
+```
+
+Compare the hashes before extraction. The installer output is
+`C:\Build\UcxStats-0.12.3.5-Beta\output\UcxStats-Setup-0.12.3.5-win-x64.exe`.
+No final Inno Setup EXE or native Windows runtime validation is claimed from Linux.
+The installer is unsigned, so Windows SmartScreen may warn. Complete the native
+sharing/source-reconciliation and installer checklist before manually publishing
+the GitHub beta release. No Git tag or GitHub Release is created by this workflow.
+
+Final Linux Beta verification: the default pipeline validates 435 payload files;
+all five application DLL assembly/file/product versions are 0.12.3.5. The packaging
+suite passes against the final archive (31 tests, 9 PowerShell-related skips).
+The archive SHA-256 and full results are in the
+[release notes](releases/v0.12.3.5.md#final-beta-verification-2026-10-26).
+
 ## Inspected solution and assets
 
 `UcxStats.Wpf` references `UcxStats.Core`, `UcxStats.Data`, `UcxStats.Geo` and
@@ -70,11 +104,11 @@ and attribution as described in the notices.
 
 ## Versioning and reproducibility
 
-`Directory.Build.props` contains the explicit four-component `Version`, initially
-**0.12.3.3**, taken from the pre-existing UI/README baseline. This is not a new
-release claim. The map-settings installer uses **0.12.3.4**. Assembly/file versions,
+`Directory.Build.props` contains the single four-component application `Version`,
+now **0.12.3.5**, following public **0.12.3.4**. Assembly/file/product versions,
 the window title, map User-Agent, manifest,
-installer metadata and installer filename derive from it. Linux resolves this
+installer metadata, Windows Installed Apps/Add/Remove Programs display version,
+and installer filename derive from it. Linux resolves this
 version into `manifest.json` (schema 2); the standalone Windows script reads it
 there and verifies the published dependency version, without consulting project
 files. The manifest also records the resolved SDK, runtime and Inno compiler
@@ -126,7 +160,7 @@ dotnet test UcxStats.sln -c Release --no-build --no-restore --artifacts-path art
 dotnet artifacts/build/linux/bin/UcxStats.SmokeTest/release/UcxStats.SmokeTest.dll
 
 ./tools/publish-win-x64.sh
-python3 tools/validate-windows-publish.py artifacts/packaging/win-x64/0.12.3.4
+python3 tools/validate-windows-publish.py artifacts/packaging/win-x64/0.12.3.5
 python3 -m unittest discover -s tests/packaging -v
 ```
 
@@ -370,7 +404,7 @@ installed maps use the new shared user-data profile.
 | --- | --- | --- |
 | SQLite QSOs, profiles, source metadata, confirmations | `%LOCALAPPDATA%\UcxStats\ucxstats.db` (+ WAL/SHM while open) | Never bundled, overwritten or removed |
 | Tile provider/configuration, including any private URLs/tokens | `%LOCALAPPDATA%\UcxStats\map-tiles.json` | Preserved; the application creates defaults only if absent |
-| General map presentation: Shortpath/Longpath widths | `%LOCALAPPDATA%\UcxStats\map-settings.json` | Preserved; application migrates legacy widths per field; original defaults remain 1.3/1.0 px |
+| General map preferences: path widths, statistics/contest options, panel positions/visibility/collapse, timeline duration/bucket/height/snapping/thresholds | `%LOCALAPPDATA%\UcxStats\map-settings.json` | Preserved with unknown fields and atomic saves; original width defaults remain 1.3/1.0 px |
 | DXCC external path, overlay default visibility and other DXCC options | `%LOCALAPPDATA%\UcxStats\map-dxcc.json` | Preserved; application removes migrated width fields only and retains unknown DXCC options |
 | Browser profile/cache | `%LOCALAPPDATA%\UcxStats\WebView2` | Outside program files; preserved |
 | Generated map HTML/normalized geometry | `%LOCALAPPDATA%\UcxStats\MapWeb\<window-id>` | Runtime temporary data; map-window cleanup remains unchanged |
@@ -426,6 +460,14 @@ licensed GeoJSON for validation; do not add them to the bundle.
   uncached network tiles may be unavailable. Verify the WebView2 profile location.
   Follow the [Windows width acceptance procedure](MAP_DXCC.md#windows-width-acceptance-procedure)
   for independent path widths, live in-place updates, reset and persistence.
+- [ ] **Map UI/timeline:** complete the [UI refinement acceptance additions](MAP_STATISTICS.md#ui-refinement-windows-acceptance-additions),
+  including draggable panels, resize/DPI/fullscreen recovery, sliders/snap escape,
+  timeline partial-bucket counts and independent windows.
+- [ ] **Map statistics:** follow the [statistics/Live activity acceptance checklist](MAP_STATISTICS.md#windows-acceptance-checklist).
+  Verify scoped totals versus mappability, distinct band unions, station-profile ODX,
+  optional contest estimates, independent one-second live timer and persistence
+  alongside path widths. Test multiple/reused windows, synchronization and fullscreen.
+  Linux algorithm/JavaScript tests do not validate WPF/WebView2 interaction.
 - [ ] **DXCC:** first test without geometry (main app/maps work, overlay unavailable).
   Select an external absolute GeoJSON path, enable the overlay, inspect polygons,
   status colors/band filtering and repeat after restart. Test missing/invalid
